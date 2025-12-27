@@ -19,7 +19,7 @@ import platform
 
 # ===================== 1. 配置区域 =====================
 TARGET_YEAR = 2025
-CSV_PATH = "messages.csv"
+CSV_PATH = "messages1.csv"
 MIN_MSG_THRESHOLD = 100 
 
 # ===================== 2. 核心工具函数 =====================
