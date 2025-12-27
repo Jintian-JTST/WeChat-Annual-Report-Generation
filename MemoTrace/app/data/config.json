@@ -1,0 +1,45 @@
+{
+    "INFO_FILE_PATH": ".\\app\\data\\info.json",
+    "DB_DIR": ".\\app\\Database\\Msg",
+    "OUTPUT_DIR": ".\\data",
+    "SEND_LOG_FLAG": true,
+    "UPDATE_TIME": 0,
+    "MSGS_EACH_PDF": 500,
+    "TASKS_PRINT": 4,
+    "MSGS_EACH_DOCX": 500,
+    "JSON_CONFIG": {
+        "prompt": "你是{{name}}，一个聪明、热情、善良的人，后面的对话来自你的朋友，你要认真地回答他",
+        "shuffle": true,
+        "train_ratio": 80,
+        "model": "GLM4",
+        "assistant": 0,
+        "strategy": 1,
+        "strategy0": {
+            "intervals": 120
+        },
+        "strategy1": {
+            "span": 300
+        },
+        "strategy2": {
+            "window_size": 10,
+            "step": 3
+        }
+    },
+    "USERNAME": "wxid_1tis6tixepi712",
+    "USERS": [
+        {
+            "USERNAME": "wxid_1tis6tixepi712",
+            "NICKNAME": "金田-JTST"
+        }
+    ],
+    "PDF_CONFIG": {
+        "bg_color": "#F5F5F5",
+        "page_size": 0,
+        "margin": [
+            0,
+            0,
+            0,
+            0
+        ]
+    }
+}

@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="zh">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+    <title>聊天数据分析</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon-Dy462c0O.ico">
+    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-Dy462c0O.ico">
+    <!-- layui样式 -->
+    <link rel="stylesheet" href="/layui/css/layui.css">
+    <!-- Y-Admin核心样式 -->
+    <!-- 公共样式 -->
+    <!-- 图标 -->
+    <link rel="stylesheet" href="/static/remixicon/fonts/remixicon.css">
+    <!-- 首页样式（只为此页面使用） -->
+  <script type="module" crossorigin src="/assets/main-BQ2_GQ3B.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-B5Qt9EMX.js">
+  <link rel="modulepreload" crossorigin href="/assets/main-D83nNWqK.js">
+  <link rel="stylesheet" crossorigin href="/assets/main-Z5gAfKnc.css">
+</head>
+
+<body class="layui-layout-body">
+
+    <div class="layui-layout layui-layout-admin">
+
+        <div class="layui-header">
+            <!-- logo 区域 -->
+            <div class="layui-logo">
+                <img src="/assets/%E6%9C%AA%E5%91%BD%E5%90%8D-Dsf0DIPe.png" alt="logo" style="margin-left: -5px;" />
+                <cite>
+                    MemoTrace&emsp;
+                </cite>
+            </div>
+
+            <!-- 头部区域 -->
+            <ul class="layui-nav layui-layout-left">
+                <li class="layui-nav-item" lay-unselect>
+                    <a lay-event="flexible" title="侧边伸缩">
+                        <i class="layui-icon layui-icon-shrink-right"></i>
+                    </a>
+                </li>
+                <!-- 面包屑 -->
+                <span class="layui-breadcrumb layui-anim layui-anim-up">
+                    <a><cite>首页</cite></a>
+                </span>
+            </ul>
+
+            <!-- 头像区域 -->
+            <ul class="layui-nav layui-layout-right">
+
+                <li class="layui-nav-item">
+                    <div id="contact" class="layui-inline" style="color: black;font-size: large;font-weight: 700;">
+                        联系人
+                    </div>
+                </li>
+
+                <li class="layui-nav-item feature-items">
+                    <div class="layui-inline" id="ID-laydate-rangeLinked">
+                        <div class="layui-input-inline">
+                            <input type="text" autocomplete="off" id="ID-laydate-start-date-1" class="layui-input" placeholder="开始日期">
+                        </div>
+                        
+                        <div class="layui-form-mid">---</div>
+                        <div class="layui-input-inline">
+                            <input type="text" autocomplete="off" id="ID-laydate-end-date-1" class="layui-input" placeholder="结束日期">
+                        </div>
+                    </div>
+                </li>
+
+                <li class="layui-nav-item feature-items">
+                    <a lay-event="website" title="前台">
+                        <i class="ri-earth-line"></i>
+                    </a>
+                </li>
+
+                <li class="layui-nav-item feature-items">
+                    <a lay-event="clear" title="清理标签缓存"><i class="ri-brush-3-line"></i></a>
+                </li>
+
+                <li class="layui-nav-item feature-items">
+                    <a id="screenFull" lay-event="screenFull" title="全屏">
+                        <i class="ri-fullscreen-line"></i>
+                    </a>
+                    <a id="screenRestore" lay-event="screenRestore" title="退出全屏" style="display: none;">
+                        <i class="ri-fullscreen-exit-line"></i>
+                    </a>
+                </li>
+
+                <li class="layui-nav-item user-selection">
+                    <a>
+                        <img src="/assets/avatar-BikkwvRz.png" class="layui-nav-img" alt="头像" id="my-avatar">
+                        <cite id="my-nickname">管理员</cite>
+                        <span class="layui-nav-more"></span>
+                    </a>
+                    <dl class="layui-nav-child">
+                        <!-- <dd lay-unselect>
+                            <a lay-event="userInfo">基本资料</a>
+                        </dd>
+                        <dd lay-unselect>
+                            <a lay-event="editPwd">修改密码</a>
+                        </dd>
+                        <dd lay-unselect>
+                            <a lay-event="hello">hello</a>
+                        </dd>
+                        <hr>
+                        <dd lay-unselect>
+                            <a href="./signIn.html">退出</a>
+                        </dd> -->
+                    </dl>
+                </li>
+            </ul>
+        </div>
+
+        <!-- 左侧导航区域 -->
+        <div class="layui-side ">
+            <div class="layui-side-scroll">
+                <ul class="layui-nav layui-nav-tree" lay-filter="lay-nav" lay-accordion="true">
+                    <li class="layui-nav-item">
+                        <a lay-url="/view/home/index.html" lay-id="home">
+                            <i class="ri-home-8-line"></i>&emsp;<cite>首页</cite>
+                        </a>
+                    </li>
+                    <li class="layui-nav-item">
+                        <a lay-id="https://memotrace.cn/doc/" lay-url="https://memotrace.cn/doc/">
+                            <i class="ri-file-paper-2-line"></i>&emsp;<cite>教程</cite>
+                        </a>
+                    </li>
+                    <li class="layui-nav-item">
+                        <a lay-id="https://chat.memotrace.cn/" lay-url="https://chat.memotrace.cn/">
+                            <i class="ri-chat-smile-2-line"></i>&emsp;<cite>小助手</cite>
+                        </a>
+                    </li>
+                    <li class="layui-nav-item">
+                        <a lay-id="https://memotrace.cn/tools/" lay-url="https://memotrace.cn/tools/">
+                            <i class="ri-magic-fill"></i>&emsp;<cite>实用工具</cite>
+                        </a>
+                    </li>
+                    <li class="layui-nav-item">
+                        <a lay-id="https://memotrace.cn/" lay-url="https://memotrace.cn/">
+                            <i class="ri-pages-line"></i>&emsp;<cite>官网</cite>
+                        </a>
+                    </li>
+                    <!-- <li class="layui-nav-item">
+                        <a lay-id="https://remixicon.com/" lay-url="https://remixicon.com/">
+                            <i class="ri-remixicon-line"></i>&emsp;<cite>图标</cite>
+                        </a>
+                    </li> -->
+                </ul>
+
+                <div id="message">
+                    <div class="notification-box" lay-event="notification-">
+                        <span class="notification-count">
+                            <!-- 此处可写数字 -->
+                             5
+                        </span>
+                        <div class="notification-bell">
+                            <span class="bell-top"></span>
+                            <span class="bell-middle"></span>
+                            <span class="bell-bottom"></span>
+                            <span class="bell-rad"></span>
+                        </div>
+                    </div>
+                    <h3>消息通知</h3>
+                    <p>可掌控的才真正属于你!</p>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="layui-body">
+            <div class="layui-pagetabs">
+                <div class="layui-icon admin-tabs-control layui-icon-refresh-3" lay-event="refresh"></div>
+                <div class="layui-tab" lay-unauto lay-allowclose="true" lay-filter="lay-tab">
+                    <ul class="layui-tab-title">
+                        <li lay-id="home" lay-url="/view/home/index.html" class="layui-this">
+                            <!-- <i class="ri-home-heart-line ri-xl"></i> -->
+                            <i class="ri-home-8-line ri-xl"></i>
+                        </li>
+                    </ul>
+                    <div class="layui-tab-content">
+                        <div class="layui-tab-item layui-show">
+                            <iframe src="/view/home/index.html" class="layui-iframe" id="homepage"></iframe>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 底部固定区域 -->
+        <div class="layui-footer">
+            Powered by Y-Admin.
+            <ul class="tabbar">
+                <li>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                        <path fill="none" d="M0 0h24v24H0z" />
+                        <path
+                            d="M12.414 5H21a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h7.414l2 2zM15 13v-1a3 3 0 0 0-6 0v1H8v4h8v-4h-1zm-2 0h-2v-1a1 1 0 0 1 2 0v1z" />
+                    </svg>
+                </li>
+                <li>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                        <path fill="none" d="M0 0h24v24H0z" />
+                        <path
+                            d="M21 5a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h7.414l2 2H16v2h2V5h3zm-3 8h-2v2h-2v3h4v-5zm-2-2h-2v2h2v-2zm2-2h-2v2h2V9zm-2-2h-2v2h2V7z" />
+                    </svg>
+                </li>
+                <li>
+                    <div class="fileAdd">
+                        <ul>
+                            <li class="word"></li>
+                            <li class="powerpoint"></li>
+                            <li class="excel"></li>
+                        </ul>
+                        <div>
+                            <span></span>
+                        </div>
+                    </div>
+                </li>
+                <li>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                        <path fill="none" d="M0 0h24v24H0z" />
+                        <path
+                            d="M12.414 5H21a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h7.414l2 2zM11 13.05a2.5 2.5 0 1 0 2 2.45V11h3V9h-5v4.05z" />
+                    </svg>
+                </li>
+                <li>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+                        <path fill="none" d="M0 0h24v24H0z" />
+                        <path
+                            d="M12.414 5H21a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h7.414l2 2zM12 13a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zm-4 5h8a4 4 0 1 0-8 0z" />
+                    </svg>
+                </li>
+            </ul>
+
+        </div>
+
+        <!-- 移动端遮罩 -->
+        <div class="site-mobile-shade"></div>
+    </div>
+    <!-- layui JS -->
+    <script  src="/layui/layui.js"></script>
+    <!-- jQuery JS -->
+    <script  src="/js/jquery.js"></script>
+    <!-- 公共JS -->
+    <script  src="/js/common.js"></script>
+    <script>
+        layui.use(function(){
+            var laydate = layui.laydate;
+            laydate.render({
+                elem: '#ID-laydate-rangeLinked',
+                range: ['#ID-laydate-start-date-1', '#ID-laydate-end-date-1'],
+                rangeLinked: true, // 开启日期范围选择时的区间联动标注模式 ---  2.8+ 新增
+                calendar: true,
+                done: function(value, date, endDate){
+                    console.log(value); // 日期字符，如： 2017-08-18
+                    console.log(date); // 包含年月日时分秒各项值的对象
+                    console.log(endDate); // 结束日期时间对象，当设置 range 时才会返回。对象成员同上。
+                    var message = {
+                        type: 'setDate',  // 添加消息类型
+                        value: value
+                    };
+                    console.log('Message:', message);
+                    var iframe = document.getElementById('homepage').contentWindow;
+                    iframe.postMessage(message, '*');
+                }
+            });
+        });
+    </script>
+    <script type="module"></script>
+</body>
+
+</html>

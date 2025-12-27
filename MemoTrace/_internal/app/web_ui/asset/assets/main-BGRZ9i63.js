@@ -1,0 +1,1 @@
+import"./modulepreload-polyfill-B5Qt9EMX.js";import{g as n}from"./main-C9DFL4CK.js";n().then(e=>{if(e){console.log("Contact:",e);var o=document.getElementById("my-avatar");o.src=e.avatar;var r=document.getElementById("my-nickname");r.innerText=e.nickname}else console.log("Failed to fetch contact.")}).catch(e=>console.error("Error:",e));

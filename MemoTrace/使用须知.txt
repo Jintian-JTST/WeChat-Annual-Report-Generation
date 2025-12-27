@@ -1,0 +1,12 @@
+官网：https://memotrace.cn/
+
+1、软件仅供导出本人数据、请在法律允许的范围内使用本软件
+2、软件不要放在中文或空格路径下
+3、解压之后有三部分，缺一不可
+	1) MemoTrace.exe
+	2) update.exe
+ 	3) _internal目录
+4、双击MemoTrace.exe打开使用
+5、有问题请先查看教程：https://memotrace.cn/doc/
+
+如果上述链接无法解决您的问题，请添加微信公众号 https://memotrace.cn/doc/posts/develop/contact.html 联系技术人员解决
