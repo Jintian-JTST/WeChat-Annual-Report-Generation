@@ -1,0 +1,4 @@
+# 忽略所有 CSV 数据文件
+*.csv
+# 或者指定具体文件
+wechat/messages.csv
