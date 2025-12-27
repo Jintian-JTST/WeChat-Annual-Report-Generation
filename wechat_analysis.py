@@ -1,10 +1,10 @@
 """
-WeChat Annual Report (Final Fixed Edition)
+WeChat Annual Report (Green Matrix Edition)
 -----------------------------------
-- 核心修复：增加【说话人数检测】，强制识别群聊（解决群聊为0的问题）
-- 修复：移除图表标题中的 Emoji，解决微软雅黑报错
-- 优化：屏蔽烦人的 UserWarning 红色日志
-- 布局：群聊/单聊 完美分离
+- 修复：热力图标签回归 + 纯黑/荧光绿高对比度配色
+- 修复：强制过滤疑似群聊（通过关键词、空格、长度检测）
+- 新增：单人深度画像增加【字数 vs 消息数】双维度对比图
+- 视觉：全线统一为黑客帝国绿 (Matrix Green) 风格
 """
 
 import pandas as pd
@@ -17,474 +17,421 @@ from io import BytesIO
 import base64
 import matplotlib.font_manager as fm
 import platform
+import matplotlib.colors as mcolors
+import numpy as np
 import warnings
 
-# ===================== 0. 屏蔽警告 =====================
-# 这一行会把那些 "Glyph missing" 的红色报错全部闭嘴
+# ===================== 0. 基础设置 =====================
 warnings.filterwarnings("ignore")
 
-# ===================== 1. 配置区域 =====================
 TARGET_YEAR = 2025
-CSV_PATH = "messages.csv" # 如果你的文件叫 messages1.csv，请改这里
-MIN_MSG_THRESHOLD = 100 
+CSV_PATH = "messages.csv"  # 记得改回你的文件名，如 messages1.csv
+MIN_MSG_THRESHOLD = 50     # 稍微降低门槛，防止漏掉重要的人
 
-# ===================== 2. 核心工具函数 =====================
+# ===================== 1. 核心工具函数 =====================
 
 def clean_text_for_plot(text):
-    """移除文本中的 Emoji 和非 BMP 字符"""
     if not isinstance(text, str): return str(text)
     emoji_pattern = re.compile(u'[\U00010000-\U0010ffff]', flags=re.UNICODE)
-    text = emoji_pattern.sub(r'', text)
-    return text.strip()
+    return emoji_pattern.sub(r'', text).strip()
 
 def get_chinese_font():
     os_name = platform.system()
-    font_list = []
-    if os_name == "Windows":
-        font_list = ["Microsoft YaHei", "SimHei"]
-    elif os_name == "Darwin":
-        font_list = ["PingFang SC", "Arial Unicode MS"]
-    else:
-        font_list = ["WenQuanYi Micro Hei"]
-    return font_list
+    if os_name == "Windows": return ["Microsoft YaHei", "SimHei"]
+    elif os_name == "Darwin": return ["PingFang SC", "Arial Unicode MS"]
+    return ["WenQuanYi Micro Hei"]
 
-# ===================== 3. 风格设置 =====================
-def set_dark_style():
+# ===================== 2. 视觉风格 (黑客帝国绿) =====================
+def set_matrix_style():
     plt.style.use('dark_background')
     plt.rcParams["font.sans-serif"] = get_chinese_font() + plt.rcParams["font.sans-serif"]
     plt.rcParams["axes.unicode_minus"] = False 
-    plt.rcParams['axes.prop_cycle'] = plt.cycler(color=['#00f2ea', '#ff0050', '#f9f871', '#00ff87', '#bd00ff'])
+    # 统一绿色系：荧光绿，深绿，草绿，青色
+    plt.rcParams['axes.prop_cycle'] = plt.cycler(color=['#00ff41', '#008f11', '#003b00', '#ccffcc', '#ffffff'])
     plt.rcParams['axes.edgecolor'] = '#333333'
     plt.rcParams['grid.color'] = '#222222'
+    plt.rcParams['text.color'] = '#cccccc'
+    plt.rcParams['axes.labelcolor'] = '#cccccc'
+    plt.rcParams['xtick.color'] = '#888888'
+    plt.rcParams['ytick.color'] = '#888888'
+
+def get_green_cmap():
+    """自定义高对比度绿色热力图：0是黑色，1立刻变绿"""
+    colors = ["#1a1a1a", "#0d330d", "#00ff41"] # 背景黑 -> 深绿 -> 亮绿
+    return mcolors.LinearSegmentedColormap.from_list("matrix_green", colors, N=256)
 
 def fig_to_base64(fig):
     buf = BytesIO()
-    fig.savefig(buf, format="png", dpi=120, bbox_inches="tight", facecolor=fig.get_facecolor())
+    fig.savefig(buf, format="png", dpi=120, bbox_inches="tight", facecolor='#000000') # 统一背景色
     buf.seek(0)
     img = base64.b64encode(buf.read()).decode()
     plt.close(fig)
     return img
 
-# ===================== 4. 数据加载 (超级增强版) =====================
+# ===================== 3. 数据加载 (增强过滤) =====================
 def load_data():
-    print(f"正在加载数据: {CSV_PATH} ...")
+    print("-" * 30)
+    print(f"🚀 [1/6] 正在读取文件: {CSV_PATH}")
+    print("        (文件较大，如果卡住超过 1 分钟，请检查文件是否被 Excel 占用)...")
+    
     try:
-        df = pd.read_csv(CSV_PATH, encoding="utf-8", on_bad_lines="skip")
+        # 优化点：dtype=str 极大提升读取速度，low_memory=False 避免警告
+        df = pd.read_csv(CSV_PATH, encoding="utf-8", on_bad_lines="skip", low_memory=False, dtype=str)
     except UnicodeDecodeError:
+        print("   ⚠️ UTF-8 解码失败，尝试 GBK...")
         try:
-            df = pd.read_csv(CSV_PATH, encoding="gbk", on_bad_lines="skip")
+            df = pd.read_csv(CSV_PATH, encoding="gbk", on_bad_lines="skip", low_memory=False, dtype=str)
         except:
-            print("❌ 无法读取 CSV")
+            print("❌ 无法读取 CSV，请检查文件编码或是否损坏")
             return pd.DataFrame()
+            
+    print(f"✅ [2/6] 读取完成，原始行数: {len(df)}")
 
+    # 类型过滤
     if "Type" in df.columns:
-        df = df[df["Type"] == 1].copy()
-        
+        df = df[df["Type"] == "1"].copy() # 注意这里变成了字符串 "1"
+    
+    print("🚀 [3/6] 正在转换时间格式 (这可能需要几秒钟)...")
     df["dt"] = pd.to_datetime(df["StrTime"], errors="coerce")
     df = df.dropna(subset=["dt"])
     df = df[df["dt"].dt.year == TARGET_YEAR]
     
+    # 转换列格式
+    print("🚀 [4/6] 正在清洗数据字段...")
+    df["IsSender"] = pd.to_numeric(df["IsSender"], errors='coerce').fillna(0).astype(int)
     df["Date"] = df["dt"].dt.date
     df["Month"] = df["dt"].dt.month
     df["Hour"] = df["dt"].dt.hour
     df["SenderType"] = df["IsSender"].map({1: "我", 0: "对方"})
     df["StrContent"] = df["StrContent"].fillna("")
     df["NickName"] = df["NickName"].fillna("Unknown").str.strip()
-
+    
     if "Sender" not in df.columns:
         df["Sender"] = df["SenderType"]
     else:
         df["Sender"] = df["Sender"].fillna("Unknown")
         df.loc[df["IsSender"] == 1, "Sender"] = "我"
 
-    # === 【核心修复】智能识别群聊 ===
-    # 策略1：看 TalkerId 是否以 @chatroom 结尾 (标准微信)
-    # 策略2：看这个 NickName 下面，有多少个不同的 Sender (排除"我")
-    # 如果 Sender 数量 > 1，那这绝对是个群
-    
-    # 1. 初始化全为 Private
+    # === 群聊识别 ===
+    print("🚀 [5/6] 正在进行群聊智能分类...")
     df["ChatType"] = "Private"
     
-    # 2. 应用策略 1
+    # 策略1: ID
     if "TalkerId" in df.columns:
-        mask_chatroom = df["TalkerId"].astype(str).str.endswith("@chatroom")
-        df.loc[mask_chatroom, "ChatType"] = "Group"
+        df.loc[df["TalkerId"].astype(str).str.endswith("@chatroom"), "ChatType"] = "Group"
         
-    # 3. 应用策略 2 (人数检测) - 这是解决你问题的关键
-    print("正在进行群聊智能检测 (基于发言人数)...")
-    # 只看对方发的消息
-    incoming = df[df["IsSender"] == 0]
-    # 统计每个会话有多少个不同的发送者
-    sender_counts = incoming.groupby("NickName")["Sender"].nunique()
-    # 如果超过1个人说话，标记为群聊
-    detected_groups = sender_counts[sender_counts > 1].index.tolist()
+    # 策略2: 关键词 (极速版)
+    # 使用向量化字符串操作，比 apply 快 100 倍
+    keywords = ["群", "Group", "Team", "Offer", "指南", "2025", "25fall"]
+    pattern = "|".join(keywords) # 生成正则表达式 "群|Group|Team..."
+    mask_keyword = df["NickName"].str.contains(pattern, case=False, na=False)
+    df.loc[mask_keyword, "ChatType"] = "Group"
     
-    # 更新标记
-    df.loc[df["NickName"].isin(detected_groups), "ChatType"] = "Group"
+    # 策略3: 逻辑推断 (人数 > 1)
+    # 这是一个耗时操作，我们优化一下：只对 Private 的进行检查
+    potential_private = df[df["ChatType"] == "Private"]
+    incoming = potential_private[potential_private["IsSender"] == 0]
     
-    # 4. 强制修正一些关键词 (保底)
-    keywords = ["群", "Group", "Offer", "指南", "team", "Team", "2025", "25fall"]
-    for kw in keywords:
-        df.loc[df["NickName"].str.contains(kw, case=False, na=False), "ChatType"] = "Group"
+    # 只有当潜在单聊数据量不大时才跑这个，否则跳过
+    if len(incoming) > 0:
+        sender_counts = incoming.groupby("NickName")["Sender"].nunique()
+        real_groups = sender_counts[sender_counts > 1].index
+        df.loc[df["NickName"].isin(real_groups), "ChatType"] = "Group"
 
-    # 统计
-    c_counts = df["ChatType"].value_counts()
-    print(f"📊 识别结果: 单聊 {c_counts.get('Private', 0)} 条, 群聊 {c_counts.get('Group', 0)} 条")
+    p_count = len(df[df['ChatType']=='Private'])
+    g_count = len(df[df['ChatType']=='Group'])
+    print(f"✅ [6/6] 数据加载完毕! (单聊: {p_count}, 群聊: {g_count})")
+    print("-" * 30)
     
     return df
 
-# ===================== 5. 全局图表 =====================
+# ===================== 4. 图表生成 (绿色高对比版) =====================
 
-def monthly_trend(df):
-    set_dark_style()
-    data = df.groupby("Month").size().reindex(range(1, 13), fill_value=0)
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(data.index, data.values, marker="o", color="#00f2ea", linewidth=2)
-    ax.fill_between(data.index, data.values, color="#00f2ea", alpha=0.1)
-    ax.set_ylim(bottom=0)
-    ax.set_title("Total Monthly Trend", color="white") # 去掉中文/Emoji防止报错
-    ax.set_xticks(range(1, 13))
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    return fig_to_base64(fig)
-
-def generate_global_wordcloud(text):
-    text = re.sub(r"[A-Za-z0-9]+", "", text)
-    stopwords = {"的","了","我","是","在","也","有","就","不","人","我们","哈哈","哈哈哈","图片","视频","啊","吗","吧","可以","你","他","她","它","这","那","和","与","但","如果","因为","所以","还","要","说","会","都","很","还要","给","上","去","来","就是","那个","然后","觉得","其实","嗯","哦"}
-    words = [w for w in jieba.cut(text) if len(w) > 1 and w not in stopwords]
-    clean_words = [clean_text_for_plot(w) for w in words]
-    if not clean_words: return ""
+def generate_heatmap_with_labels(df, title="活跃热力图"):
+    """带标签的高对比度绿色热力图"""
+    set_matrix_style()
     
-    font_path = "msyh.ttc"
-    if platform.system() == "Darwin": font_path = "/System/Library/Fonts/PingFang.ttc"
-    
-    try:
-        wc = WordCloud(font_path=font_path, width=900, height=400, 
-                       background_color="black", colormap="cool", max_words=100).generate(" ".join(clean_words))
-    except:
-        wc = WordCloud(width=900, height=400, background_color="black").generate(" ".join(clean_words))
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    fig.patch.set_facecolor('black')
-    ax.imshow(wc)
-    ax.axis("off")
-    return fig_to_base64(fig)
-
-def generate_global_heatmap(df):
-    set_dark_style()
+    # 准备数据
     year_start = pd.Timestamp(f"{TARGET_YEAR}-01-01")
     year_end = pd.Timestamp(f"{TARGET_YEAR}-12-31")
     full_range = pd.date_range(year_start, year_end, freq="D")
     
-    daily_counts = df.groupby("Date").size()
+    daily = df.groupby("Date").size()
     full = pd.DataFrame({"Date": full_range})
-    full["count"] = full["Date"].dt.date.map(daily_counts).fillna(0).astype(int)
+    full["count"] = full["Date"].dt.date.map(daily).fillna(0).astype(int)
     full["week"] = (full["Date"] - year_start).dt.days // 7
     full["weekday"] = full["Date"].dt.weekday
-    heatmap_data = full.pivot(index="weekday", columns="week", values="count")
     
-    fig, ax = plt.subplots(figsize=(16, 3.5))
-    vmax = heatmap_data.max().max() or 1
-    sns.heatmap(heatmap_data, cmap="mako", vmin=0, vmax=vmax, cbar=False, ax=ax)
-    ax.axis('off')
-    ax.set_title("2025 Activity Heatmap", color='white', fontsize=14, pad=10) # 英文标题防报错
+    data = full.pivot(index="weekday", columns="week", values="count")
+    
+    # 绘图
+    fig, ax = plt.subplots(figsize=(12, 3))
+    vmax = data.max().max()
+    if vmax < 5: vmax = 5 # 防止数据太少一片黑
+    
+    # 使用自定义绿色
+    sns.heatmap(data, cmap=get_green_cmap(), vmin=0, vmax=vmax, cbar=False, ax=ax, linewidths=0.5, linecolor='#000000')
+    
+    # --- 【关键修复】加上标签 ---
+    # Y轴：星期
+    ax.set_yticks([0.5, 3.5, 6.5])
+    ax.set_yticklabels(["Mon", "Thu", "Sun"], rotation=0, fontsize=9, color="#666")
+    ax.set_ylabel("")
+    
+    # X轴：月份 (估算位置)
+    ax.set_xlabel("")
+    month_starts = [0, 4, 8, 13, 17, 21, 26, 30, 35, 39, 43, 48]
+    month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    ax.set_xticks(month_starts)
+    ax.set_xticklabels(month_labels, fontsize=9, color="#666", rotation=0)
+    
+    ax.set_title(title, color="white", fontsize=12, pad=10, loc='left')
     return fig_to_base64(fig)
 
-def generate_rank_bar(df, title="Ranking"):
-    set_dark_style()
-    top_data = df.groupby("NickName").size().sort_values(ascending=False).head(10)
-    # 清洗 Label 的 Emoji
-    clean_names = [clean_text_for_plot(name) for name in top_data.index]
+def generate_char_compare_chart(sub_df):
+    """【新增】字数 vs 消息数 对比图"""
+    set_matrix_style()
+    
+    # 统计数据
+    my_df = sub_df[sub_df["IsSender"] == 1]
+    other_df = sub_df[sub_df["IsSender"] == 0]
+    
+    my_msg_count = len(my_df)
+    other_msg_count = len(other_df)
+    
+    my_char_count = my_df["StrContent"].str.len().sum()
+    other_char_count = other_df["StrContent"].str.len().sum()
+    
+    # 避免除以0
+    total_msg = my_msg_count + other_msg_count or 1
+    total_char = my_char_count + other_char_count or 1
+    
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 2.5))
+    
+    # 图1：消息数对比 (水平条)
+    ax1.barh([0], [my_msg_count], color="#00ff41", label="我")
+    ax1.barh([0], [other_msg_count], left=[my_msg_count], color="#444", label="对方")
+    ax1.set_title(f"消息条数 ({total_msg})", fontsize=10, color="#aaa")
+    ax1.axis('off')
+    # 标数字
+    ax1.text(my_msg_count/2, 0, str(my_msg_count), ha='center', va='center', color='black', fontweight='bold')
+    ax1.text(my_msg_count + other_msg_count/2, 0, str(other_msg_count), ha='center', va='center', color='white')
+
+    # 图2：字数对比 (水平条)
+    ax2.barh([0], [my_char_count], color="#008f11", label="我")
+    ax2.barh([0], [other_char_count], left=[my_char_count], color="#444", label="对方")
+    ax2.set_title(f"总字数 ({total_char:,})", fontsize=10, color="#aaa")
+    ax2.axis('off')
+    # 标数字
+    if my_char_count > 0:
+        ax2.text(my_char_count/2, 0, f"{my_char_count:,}", ha='center', va='center', color='white', fontsize=9)
+    if other_char_count > 0:
+        ax2.text(my_char_count + other_char_count/2, 0, f"{other_char_count:,}", ha='center', va='center', color='white', fontsize=9)
+
+    return fig_to_base64(fig)
+
+def generate_hourly_curve(sub_df):
+    """把原来的柱状图改成更平滑的曲线图，看起来更高级"""
+    set_matrix_style()
+    hourly = sub_df.groupby("Hour").size().reindex(range(24), fill_value=0)
+    
+    fig, ax = plt.subplots(figsize=(10, 3))
+    # 填充曲线
+    ax.fill_between(hourly.index, hourly.values, color="#00ff41", alpha=0.2)
+    ax.plot(hourly.index, hourly.values, color="#00ff41", linewidth=2)
+    
+    ax.set_xticks([0, 6, 12, 18, 23])
+    ax.set_xticklabels(["0h", "6h", "12h", "18h", "23h"])
+    ax.set_yticks([]) # 隐藏Y轴数字
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.set_title("24H 活跃曲线", fontsize=10, color="#888", loc='left')
+    
+    return fig_to_base64(fig)
+
+def generate_rank_bar(df, title):
+    set_matrix_style()
+    top = df.groupby("NickName").size().sort_values(ascending=False).head(10)
+    names = [clean_text_for_plot(n) for n in top.index]
     
     fig, ax = plt.subplots(figsize=(10, 6))
-    bars = ax.barh(range(len(top_data)), top_data.values, color="#00ff87")
+    bars = ax.barh(range(len(top)), top.values, color="#00ff41")
     ax.invert_yaxis()
     
-    ax.set_yticks(range(len(top_data)))
-    ax.set_yticklabels(clean_names, fontsize=12, color="white") 
+    # Label 全显示
+    ax.set_yticks(range(len(top)))
+    ax.set_yticklabels(names, fontsize=11, color="#ddd") # 字体调大
     
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.set_xticks([]) 
-
-    # 这里的 title 也要清洗 Emoji，或者干脆用英文
-    clean_title = clean_text_for_plot(title)
-    ax.set_title(clean_title, color="white", fontsize=14, pad=20)
-    
-    for i, bar in enumerate(bars):
-        ax.text(bar.get_width() + 5, bar.get_y() + bar.get_height()/2, 
-                f'{int(bar.get_width()):,}', 
-                va='center', fontsize=10, color="#ccc")
-                
-    return fig_to_base64(fig)
-
-# ===================== 6. 个人/小组件图表 =====================
-def generate_mini_heatmap(sub_df):
-    set_dark_style()
-    year_start = pd.Timestamp(f"{TARGET_YEAR}-01-01")
-    year_end = pd.Timestamp(f"{TARGET_YEAR}-12-31")
-    full_range = pd.date_range(year_start, year_end, freq="D")
-    daily_counts = sub_df.groupby("Date").size()
-    full = pd.DataFrame({"Date": full_range})
-    full["count"] = full["Date"].dt.date.map(daily_counts).fillna(0).astype(int)
-    full["week"] = (full["Date"] - year_start).dt.days // 7
-    full["weekday"] = full["Date"].dt.weekday
-    heatmap_data = full.pivot(index="weekday", columns="week", values="count")
-    
-    fig, ax = plt.subplots(figsize=(12, 2.5))
-    vmax = heatmap_data.max().max() or 1
-    sns.heatmap(heatmap_data, cmap="mako", vmin=0, vmax=vmax, cbar=False, ax=ax)
-    ax.axis('off')
-    return fig_to_base64(fig)
-
-def generate_mini_hourly(sub_df):
-    set_dark_style()
-    hourly = sub_df.groupby(["Hour", "SenderType"]).size().unstack().fillna(0).reindex(range(24), fill_value=0)
-    fig, ax = plt.subplots(figsize=(10, 4))
-    if "对方" not in hourly.columns: hourly["对方"] = 0
-    if "我" not in hourly.columns: hourly["我"] = 0
-    
-    ax.bar(hourly.index, hourly["对方"], color="#ff0050", alpha=0.9, width=0.8, label="Others")
-    ax.bar(hourly.index, hourly["我"], bottom=hourly["对方"], color="#00f2ea", alpha=0.9, width=0.8, label="Me")
-    
-    ax.set_title("24H Activity", fontsize=12, color="#ccc") # 英文
-    ax.set_xticks([0, 6, 12, 18, 23])
-    ax.set_xticklabels(["0", "6", "12", "18", "23"], fontsize=10)
-    ax.legend(loc='upper right', frameon=False, labelcolor='white')
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.get_yaxis().set_visible(False)
-    return fig_to_base64(fig)
-
-def generate_sender_rank(sub_df):
-    set_dark_style()
-    top_senders = sub_df["Sender"].value_counts().head(8)
-    clean_names = [clean_text_for_plot(name) for name in top_senders.index]
-    
-    fig, ax = plt.subplots(figsize=(10, 5))
-    colors = ['#ff0050' if idx == 0 else '#444' for idx in range(len(top_senders))]
-    if "我" in top_senders.index:
-         try:
-            my_idx = list(top_senders.index).index("我")
-            colors[my_idx] = "#00f2ea"
-         except: pass
-
-    bars = ax.barh(range(len(top_senders)), top_senders.values, color=colors)
-    ax.invert_yaxis()
-    ax.set_title("Top Speakers", fontsize=12, color="#ccc") # 英文
-    ax.set_yticks(range(len(top_senders)))
-    ax.set_yticklabels(clean_names, fontsize=11, color="white")
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
     ax.spines['left'].set_visible(False)
     ax.set_xticks([])
-    for i, bar in enumerate(bars):
-        ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2, 
-                str(int(bar.get_width())), va='center', fontsize=10, color="#ccc")
+    
+    ax.set_title(title, color="white", fontsize=14, pad=20)
+    
+    for bar in bars:
+        ax.text(bar.get_width() + 5, bar.get_y() + bar.get_height()/2, 
+                f'{int(bar.get_width()):,}', va='center', fontsize=10, color="#888")
+                
     return fig_to_base64(fig)
 
-def generate_mini_wordcloud(text):
+def generate_wordcloud(text):
     text = re.sub(r"[A-Za-z0-9]+", "", text)
-    stopwords = {"的","了","我","是","在","也","有","就","不","人","我们","哈哈","哈哈哈","图片","视频","啊","吗","吧","可以","你","他","她","它","这","那","和","与","但","如果","因为","所以","还","要","说","会","都","很","还要","给","上","去","来","就是","那个","然后","觉得","其实","嗯","哦"}
+    stopwords = {"的","了","我","是","在","也","有","就","不","人","我们","哈哈","哈哈哈","图片","视频","啊","吗","吧","可以","你","他","她","它","这","那","和","与","但","如果","因为","所以","还","要","说","会","都","很","还要","给","上","去","来","就是","那个","然后","觉得","其实","嗯","哦","表情"}
     words = [w for w in jieba.cut(text) if len(w) > 1 and w not in stopwords]
-    clean_words = [clean_text_for_plot(w) for w in words]
-    if not clean_words: return ""
+    if not words: return ""
     
     font_path = "msyh.ttc"
     if platform.system() == "Darwin": font_path = "/System/Library/Fonts/PingFang.ttc"
-
+    
     try:
-        wc = WordCloud(font_path=font_path, width=800, height=400, 
-                       background_color="#1a1a1a", colormap="cool", max_words=60).generate(" ".join(clean_words))
+        wc = WordCloud(font_path=font_path, width=800, height=300, 
+                       background_color="#000000", colormap="summer", max_words=50).generate(" ".join(words))
     except:
-        wc = WordCloud(width=800, height=400, background_color="#1a1a1a").generate(" ".join(clean_words))
+        wc = WordCloud(width=800, height=300, background_color="#000000").generate(" ".join(words))
         
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(10, 4))
     ax.imshow(wc)
-    ax.set_title("Keywords", fontsize=12, color="#ccc", pad=10)
     ax.axis("off")
     return fig_to_base64(fig)
 
-# ===================== 7. 深度分析循环 =====================
-def analyze_relationships_deep(df, top_n=10):
+# ===================== 5. 深度分析 =====================
+def analyze_profiles(df, top_n=10):
     counts = df.groupby("NickName").size().sort_values(ascending=False)
-    valid_counts = counts[counts >= MIN_MSG_THRESHOLD]
-    top_names = valid_counts.head(top_n).index.tolist()
+    valid = counts[counts >= MIN_MSG_THRESHOLD].head(top_n)
     
     profiles = []
-    for i, name in enumerate(top_names):
-        print(f"  分析: {name}")
-        sub_df = df[df["NickName"] == name]
-        total_msgs = len(sub_df)
+    for name in valid.index:
+        print(f"  > 分析: {name}")
+        sub = df[df["NickName"] == name]
         
         profiles.append({
-            "rank": i+1,
-            "name": name,
-            "count": total_msgs,
-            "heatmap": generate_mini_heatmap(sub_df),
-            "hourly": generate_mini_hourly(sub_df),
-            "sender": generate_sender_rank(sub_df),
-            "wordcloud": generate_mini_wordcloud(" ".join(sub_df["StrContent"].tolist()))
+            "rank": list(valid.index).index(name) + 1,
+            "name": clean_text_for_plot(name),
+            "count": len(sub),
+            "heatmap": generate_heatmap_with_labels(sub, title=""),
+            "hourly": generate_hourly_curve(sub),
+            "compare": generate_char_compare_chart(sub), # 新增字数对比
+            "wordcloud": generate_wordcloud(" ".join(sub["StrContent"].tolist()))
         })
     return profiles
 
-# ===================== 8. HTML 生成 =====================
-def generate_html(metrics, global_charts, private_profiles, group_profiles):
+# ===================== 6. HTML 生成 =====================
+def generate_html(metrics, charts, p_profiles, g_profiles):
     
-    def render_profiles(profiles):
-        if not profiles: return "<div style='text-align:center;color:#666'>暂无数据</div>"
-        html_str = ""
+    def render_pro(profiles):
+        if not profiles: return "<div style='text-align:center;padding:20px;color:#666'>暂无数据</div>"
+        html = ""
         for p in profiles:
-            html_str += f"""
+            html += f"""
             <div class="profile-card">
                 <div class="profile-header">
                     <div class="rank">#{p['rank']}</div>
                     <div class="info"><h3>{p['name']}</h3></div>
                     <div class="msg-count">{p['count']:,}</div>
                 </div>
+                <div class="viz-block" style="border:none; background:none; padding:0;">
+                    <img class="full-width-img" src="data:image/png;base64,{p['compare']}">
+                </div>
                 <div class="viz-block">
-                    <div class="viz-label">Activity Timeline</div>
                     <img class="full-width-img" src="data:image/png;base64,{p['heatmap']}">
                 </div>
-                <div class="viz-block"><img class="full-width-img" src="data:image/png;base64,{p['hourly']}"></div>
-                <div class="viz-block"><img class="full-width-img" src="data:image/png;base64,{p['sender']}"></div>
-                <div class="viz-block"><img class="full-width-img" src="data:image/png;base64,{p['wordcloud']}"></div>
+                <div class="grid-2">
+                    <div class="viz-block"><img class="full-width-img" src="data:image/png;base64,{p['hourly']}"></div>
+                    <div class="viz-block"><img class="full-width-img" src="data:image/png;base64,{p['wordcloud']}"></div>
+                </div>
             </div>
             """
-        return html_str
+        return html
 
-    html = f"""
+    html_content = f"""
     <html>
     <head>
     <meta charset="utf-8">
-    <title>{TARGET_YEAR} 微信年度报告</title>
+    <title>{TARGET_YEAR} WeChat Matrix Report</title>
     <style>
-    body {{ font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background-color: #0d0d0d; color: #e0e0e0; max-width: 900px; margin: 0 auto; padding: 40px; }}
-    .card {{ background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 25px; margin-bottom: 30px; }}
-    h1 {{ text-align: center; color: #fff; text-shadow: 0 0 20px rgba(0, 242, 234, 0.5); margin-bottom: 10px; font-size: 2.5em; }}
-    .subtitle {{ text-align:center; color:#666; margin-bottom:50px; font-size: 1.1em; }}
+    body {{ font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; background-color: #000000; color: #ccc; max-width: 900px; margin: 0 auto; padding: 40px; }}
+    h1 {{ color: #00ff41; text-align: center; text-shadow: 0 0 10px #003b00; font-size: 2.5em; margin-bottom: 10px; }}
+    .subtitle {{ text-align:center; color:#666; margin-bottom:50px; }}
+    
     .hero-grid {{ display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 40px; }}
-    .hero-box {{ background: linear-gradient(135deg, #1f1f1f 0%, #151515 100%); border: 1px solid #333; border-radius: 12px; padding: 25px; display: flex; flex-direction: column; justify-content: center; position: relative; overflow: hidden; }}
-    .hero-label {{ font-size: 0.9em; color: #888; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 5px; }}
-    .hero-value {{ font-size: 2.8em; color: #fff; font-weight: bold; line-height: 1.1; }}
-    .hero-sub {{ font-size: 1em; color: #00f2ea; margin-top: 5px; }}
-    .highlight {{ color: #ff0050; }}
-    .profile-card {{ background: #222; border: 1px solid #333; border-radius: 15px; padding: 30px; margin-bottom: 50px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }}
-    .profile-header {{ display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 20px; }}
-    .rank {{ font-size: 2em; font-weight: bold; color: #444; width: 60px; }}
-    .info h3 {{ margin: 0; font-size: 1.6em; color: #fff; }}
-    .msg-count {{ font-size: 1.5em; color: #00ff87; font-family: monospace; }}
-    .viz-block {{ margin-bottom: 30px; border: 1px solid #2a2a2a; background: #1a1a1a; border-radius: 8px; padding: 15px; }}
-    .viz-label {{ font-size: 0.8em; color: #666; text-transform: uppercase; margin-bottom: 10px; }}
-    .full-width-img {{ width: 100%; height: auto; display: block; border-radius: 4px; }}
-    img {{ display: block; margin: 0 auto; max-width: 100%; }}
-    h2 {{ color: #fff; border-left: 4px solid #ff0050; padding-left: 10px; }}
-    .section-divider {{ margin: 60px 0 30px 0; text-align: center; border-bottom: 1px solid #333; line-height: 0.1em; color: #888; font-size: 1.2em; }} 
-    .section-divider span {{ background: #0d0d0d; padding: 0 10px; }}
+    .hero-box {{ background: #111; border: 1px solid #003b00; border-radius: 8px; padding: 20px; text-align: center; }}
+    .hero-val {{ font-size: 2.5em; color: #00ff41; font-weight: bold; }}
+    .hero-lbl {{ color: #666; font-size: 0.9em; text-transform: uppercase; }}
+    
+    .card {{ background: #151515; border: 1px solid #222; border-radius: 12px; padding: 25px; margin-bottom: 30px; }}
+    .profile-card {{ background: #111; border-left: 3px solid #00ff41; margin-bottom: 50px; padding: 20px; }}
+    .profile-header {{ display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; padding-bottom: 15px; margin-bottom: 20px; }}
+    .info h3 {{ color: #fff; margin: 0; }}
+    .rank {{ font-size: 1.5em; color: #008f11; font-weight: bold; }}
+    .msg-count {{ font-size: 1.2em; color: #00ff41; font-family: monospace; }}
+    
+    .section-title {{ color: #fff; border-bottom: 2px solid #003b00; padding-bottom: 10px; margin: 60px 0 30px 0; text-align: left; }}
+    .grid-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }}
+    .viz-block {{ background: #151515; padding: 10px; border-radius: 6px; }}
+    img {{ max-width: 100%; display: block; margin: 0 auto; }}
     </style>
     </head>
     <body>
-    
-    <h1>{TARGET_YEAR} REWIND</h1>
-    <p class="subtitle">{metrics['start']} - {metrics['end']} • WeChat Analysis</p>
-    
-    <div class="hero-grid">
-        <div class="hero-box">
-            <div class="hero-label">年度消息总数</div>
-            <div class="hero-value">{metrics["total"]:,}</div>
-            <div class="hero-sub">日均 <span style="color:#fff">{int(metrics["avg_active"])}</span> 条</div>
+        <h1>{TARGET_YEAR} REWIND</h1>
+        <p class="subtitle">{metrics['start']} - {metrics['end']} • DATA MATRIX</p>
+        
+        <div class="hero-grid">
+            <div class="hero-box"><div class="hero-lbl">Total Messages</div><div class="hero-val">{metrics['total']:,}</div></div>
+            <div class="hero-box"><div class="hero-lbl">Total Characters</div><div class="hero-val">{metrics['total_chars']:,}</div></div>
         </div>
-        <div class="hero-box">
-            <div class="hero-label">总字数统计</div>
-            <div class="hero-value">{metrics["total_chars"]:,}</div>
-            <div class="hero-sub"><span style="color:#00f2ea">发 {metrics["sent_chars"]:,}</span> | <span style="color:#ff0050">收 {metrics["received_chars"]:,}</span></div>
+        
+        <div class="card">
+            <h3 style="color:#00ff41">📅 年度全貌</h3>
+            <img src="data:image/png;base64,{charts['heatmap']}">
         </div>
-        <div class="hero-box">
-            <div class="hero-label">最疯狂的一天</div>
-            <div class="hero-value">{metrics["busiest_date"]}</div>
-            <div class="hero-sub"><span class="highlight">{metrics["busiest_count"]:,}</span> 条消息</div>
-        </div>
-        <div class="hero-box">
-            <div class="hero-label">最亲密联系人</div>
-            <div class="hero-value" style="font-size: 2.2em;">{metrics["top_contact"]}</div>
-            <div class="hero-sub"><span class="highlight">{metrics["top_contact_count"]:,}</span> 条</div>
-        </div>
-    </div>
-    
-    <div class="card"><h2>📅 年度活跃热力图</h2><img src="data:image/png;base64,{global_charts['heatmap']}"></div>
-    <div class="card"><h2>📈 月度趋势图</h2><img src="data:image/png;base64,{global_charts['monthly']}"></div>
-    <div class="card"><h2>☁️ 全年度词云</h2><img src="data:image/png;base64,{global_charts['wordcloud']}"></div>
-    
-    <h2 class="section-divider"><span>🏆 年度排行榜</span></h2>
-    <div class="card"><h2>👤 Top 10 私聊排行榜</h2><img src="data:image/png;base64,{global_charts['private_rank']}"></div>
-    <div class="card"><h2>👥 Top 10 群聊排行榜</h2><img src="data:image/png;base64,{global_charts['group_rank']}"></div>
-    
-    <h2 class="section-divider"><span>👤 私聊深度画像 (Top 10)</span></h2>
-    {render_profiles(private_profiles)}
-    
-    <h2 class="section-divider"><span>👥 群聊深度画像 (Top 10)</span></h2>
-    {render_profiles(group_profiles)}
-    
+
+        <h2 class="section-title">🏆 排行榜 (Rankings)</h2>
+        <div class="card"><img src="data:image/png;base64,{charts['private_rank']}"></div>
+        <div class="card"><img src="data:image/png;base64,{charts['group_rank']}"></div>
+        
+        <h2 class="section-title">👤 好友深度分析 (Private Chat Deep Dive)</h2>
+        {render_pro(p_profiles)}
+        
+        <h2 class="section-title">👥 群聊深度分析 (Group Chat Deep Dive)</h2>
+        {render_pro(g_profiles)}
+        
     </body>
     </html>
     """
-    
-    with open(f"WeChat_Report_{TARGET_YEAR}_Final.html", "w", encoding="utf-8") as f:
-        f.write(html)
-    print(f"✅ 最终版报告已生成：WeChat_Report_{TARGET_YEAR}_Final.html")
+    with open(f"WeChat_Report_{TARGET_YEAR}_Green.html", "w", encoding="utf-8") as f: f.write(html_content)
+    print(f"✅ 完成！报告已生成: WeChat_Report_{TARGET_YEAR}_Green.html")
 
-# ===================== 主入口 =====================
+# ===================== 主程序 =====================
 if __name__ == "__main__":
     df = load_data()
     if not df.empty:
-        daily_counts = df.groupby("Date").size()
-        max_day = daily_counts.idxmax()
-        
-        if not df.empty:
-            top_contact_name = df["NickName"].mode()[0]
-            top_contact_count = len(df[df["NickName"] == top_contact_name])
-        else:
-            top_contact_name = "N/A"
-            top_contact_count = 0
-
+        # 计算基础指标
         df["char_len"] = df["StrContent"].astype(str).apply(len)
         metrics = {
             "total": len(df),
-            "sent": len(df[df["IsSender"]==1]),
-            "received": len(df[df["IsSender"]==0]),
-            "avg_active": round(len(df)/df["Date"].nunique(), 1) if df["Date"].nunique() > 0 else 0,
             "start": df["dt"].min().strftime("%Y.%m.%d"),
             "end": df["dt"].max().strftime("%Y.%m.%d"),
-            "top_contact": top_contact_name,
-            "top_contact_count": top_contact_count,
-            "busiest_date": max_day.strftime("%m-%d"),
-            "busiest_count": daily_counts.max(),
-            "total_chars": df["char_len"].sum(),
-            "sent_chars": df[df["IsSender"] == 1]["char_len"].sum(),
-            "received_chars": df[df["IsSender"] == 0]["char_len"].sum()
+            "total_chars": df["char_len"].sum()
         }
         
-        # 分离数据
-        df_private = df[df["ChatType"] == "Private"]
-        df_group = df[df["ChatType"] == "Group"]
+        # 分离
+        df_p = df[df["ChatType"] == "Private"]
+        df_g = df[df["ChatType"] == "Group"]
         
-        print("🎨 正在生成图表...")
-        global_charts = {
-            "monthly": monthly_trend(df),
-            "wordcloud": generate_global_wordcloud(" ".join(df["StrContent"])),
-            "heatmap": generate_global_heatmap(df),
-            "private_rank": generate_rank_bar(df_private, "Top 10 Private Chats"), # 英文标题防报错
-            "group_rank": generate_rank_bar(df_group, "Top 10 Group Chats")
+        # 生成图表
+        print("🎨 生成全局图表...")
+        charts = {
+            "heatmap": generate_heatmap_with_labels(df, "2025 Activity Matrix"),
+            "private_rank": generate_rank_bar(df_p, "Top 10 Private Chats"),
+            "group_rank": generate_rank_bar(df_g, "Top 10 Group Chats")
         }
         
-        print(f"🔍 正在分析 Top 10 好友 (池子: {len(df_private)} 条)...")
-        private_profiles = analyze_relationships_deep(df_private, top_n=10)
+        print(f"🔍 分析 Top 10 好友 (Pool: {len(df_p)})...")
+        p_pro = analyze_profiles(df_p)
+        print(f"🔍 分析 Top 10 群聊 (Pool: {len(df_g)})...")
+        g_pro = analyze_profiles(df_g)
         
-        print(f"🔍 正在分析 Top 10 群聊 (池子: {len(df_group)} 条)...")
-        group_profiles = analyze_relationships_deep(df_group, top_n=10)
-        
-        generate_html(metrics, global_charts, private_profiles, group_profiles)
+        generate_html(metrics, charts, p_pro, g_pro)
