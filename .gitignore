@@ -2,3 +2,4 @@
 *.csv
 # 或者指定具体文件
 wechat/messages.csv
+wechat/report_data.json
