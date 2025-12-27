@@ -122,8 +122,31 @@ def draw_heatmap(df, label="Activity"):
     vmax = pivot.max().max()
     if vmax < 5: vmax = 5
     
-    sns.heatmap(pivot, cmap=cmap, vmin=0, vmax=vmax, cbar=False, ax=ax, linewidths=0.5, linecolor=CONFIG["BG_COLOR"])
-    
+    sns.heatmap(
+        pivot,
+        cmap=cmap,
+        vmin=0,
+        vmax=vmax,
+        cbar=False,
+        square=True,
+        ax=ax,
+        linewidths=0.5,
+        linecolor=CONFIG["BG_COLOR"]
+    )
+
+    # 月份刻度
+    month_starts = (
+        chart_data
+        .groupby(chart_data["Timestamp"].dt.to_period("M"))["week"]
+        .min()
+    )
+
+    ax.set_xticks(month_starts.values + 0.5)
+    ax.set_xticklabels(
+        month_starts.index.strftime("%b"),
+        fontsize=9
+    )
+
     ax.set_yticks([0.5, 3.5, 6.5])
     ax.set_yticklabels(["Mon", "Thu", "Sun"], rotation=0, fontsize=9)
     ax.set_xticks([])
@@ -149,23 +172,89 @@ def draw_hourly_curve(df):
     return fig_to_base64(fig)
 
 def draw_wordcloud(df):
-    text = " ".join(df["StrContent"].tolist())
-    text = re.sub(r"[A-Za-z0-9\[\]]", "", text) 
-    words = [w for w in jieba.cut(text) if len(w) > 1]
-    if not words: return None
-    
+    text = " ".join(df["StrContent"].astype(str).tolist())
+    text = re.sub(r"[A-Za-z0-9\[\]]", "", text)
+
+    # === 1. 基础停用词（聊天高频废话）===
+    stopwords = set([
+        "这个","那个","不是","没有","然后","怎么","现在","知道","我们",
+        "你们","他们","一个","一下","这样","那样","如果","因为","所以",
+        "今天","明天","昨天","已经","还是","可能","出来","什么","看看",
+        "哈哈","哈哈哈","感觉","好像","自己","其实","应该","需要","就是",
+        "还有","还有个","还有一个","然后呢","然后就","然后我","然后你","然后他","然后她","然后他们","然后我们",
+        "然后大家","收到","收到吗","收到没","收到没有","收到没有？","收到没有！","收到没有！","知道吗","知道没","知道没有","知道没有？","知道没有！",
+        "知道没有！","了解","了解吗","了解没","了解没有","了解没有？","了解没有！","了解没有！","明白","明白吗","明白没","明白没有","明白没有？","明白没有！","明白没有！",
+        "好的","好的吧","好的啊","好的呀","好的哦","好的呢","好的！","好的！","谢谢","谢谢你","谢谢您","谢谢大家","感谢","感谢你","感谢您","感谢大家",
+        "再见","拜拜","晚安","早安","午安","早上好","中午好","下午好","晚上好","节日快乐","生日快乐","新年快乐","圣诞快乐","元旦快乐","春节快乐","国庆快乐","劳动节快乐","儿童节快乐","的","了","我","是","在","也","有","就","不","人","我们",
+        "你","他","她","它","你们","他们","她们","它们",
+        "这","那","这个","那个","这种","那种",
+        "和","与","但","如果","因为","所以","而","及","或者","并且",
+        "要","会","说","都","很","给","上","去","来",
+
+        # —— 口语 / 语气 —— #
+        "啊","吗","吧","哈哈","哈哈哈哈","真的","觉得","感觉","东西","这么","那么","这样","那个","这个",
+        "就是","就是说","就是说呢","就是说吧","就是说啊","就是说吗","比较","的话","的话呢","的话吧","的话啊","的话吗",
+        "可以","行","还","还好","有点","其实","可能","应该",
+        "然后","反正","毕竟","就是说","所以说",
+
+        # —— 否定 & 泛动词（重点） —— #
+        "不要","不能","不会","不行","不用","不想","不太",
+        "开始","出来","直接","看看","想要","喜欢","知道","想","看","好",
+
+        # —— 时间 / 范围 —— #
+        "现在","今天","昨天","明天","今年","去年",
+        "之前","以后","当时","刚","刚刚","已经","正在","将要",
+        "一些","一点","很多","几个","每个","每次","部分",
+
+        # —— 泛名词 / 废词 —— #
+        "个人","所有人","有人","别人","大家",
+        "方面","情况","问题","内容","结果","过程","原因",
+        "相关","进行","表示","认为","发现","说明","指出",
+
+        # —— 地点 / 指代 —— #
+        "这里","那里","哪里","时候","什么","怎么","怎么了","怎么会",
+
+        # —— 媒体 —— #
+        "图片","视频",
+
+        # —— 符号 —— #
+        "，","。","！","？","、","：","；","“","”","‘","’",
+        "（","）","【","】","…","—"
+    ])
+
+    # === 2. 分词 + 过滤 ===
+    words = []
+    for w in jieba.cut(text):
+        if len(w) < 2:
+            continue
+        if w in stopwords:
+            continue
+        # 过滤纯虚词模式
+        if re.fullmatch(r"[这那什怎没不还已]*", w):
+            continue
+        words.append(w)
+
+    if not words:
+        return None
+
     font_path = "msyh.ttc"
-    if platform.system() == "Darwin": font_path = "/System/Library/Fonts/PingFang.ttc"
-    
-    try:
-        wc = WordCloud(font_path=font_path, width=800, height=300, 
-                       background_color=CONFIG["BG_COLOR"], colormap="summer", max_words=40).generate(" ".join(words))
-    except: return None
-        
+    if platform.system() == "Darwin":
+        font_path = "/System/Library/Fonts/PingFang.ttc"
+
+    wc = WordCloud(
+        font_path=font_path,
+        width=900,
+        height=350,
+        background_color=CONFIG["BG_COLOR"],
+        colormap="summer",
+        max_words=50
+    ).generate(" ".join(words))
+
     fig, ax = plt.subplots(figsize=(10, 3.5))
-    ax.imshow(wc, interpolation='bilinear')
+    ax.imshow(wc, interpolation="bilinear")
     ax.axis("off")
-    ax.set_title("Keywords", loc='right', fontsize=10, color="#666")
+    ax.set_title("Keywords", loc="right", fontsize=10, color="#666")
+
     return fig_to_base64(fig)
 
 def draw_rank_bar(df, title):
@@ -298,9 +387,64 @@ def draw_member_bar(sub_df):
     ax.set_title("Top 10 Active Members", loc='right', fontsize=10, color="#666")
     return fig_to_base64(fig)
 
+# === 新增：年度走势图 ===
+def draw_line_chart(df, title):
+    set_style()
+    daily_counts = df.groupby("Date").size()
+    # 补全日期确保连续
+    idx = pd.date_range(f"{CONFIG['TARGET_YEAR']}-01-01", f"{CONFIG['TARGET_YEAR']}-12-31")
+    daily_counts = daily_counts.reindex(idx, fill_value=0)
+    
+    fig, ax = plt.subplots(figsize=(12, 3.5))
+    ax.plot(daily_counts.index, daily_counts.values, color=CONFIG["MAIN_COLOR"], linewidth=1.5)
+    ax.fill_between(daily_counts.index, daily_counts.values, color=CONFIG["MAIN_COLOR"], alpha=0.1)
+    ax.axis('off') # 极简模式，去掉坐标轴
+    ax.set_title(title, loc='left', fontsize=12, color="white", pad=10)
+    return fig_to_base64(fig)
+
+# === 修改：群成员条形图 (自己标蓝) ===
+def draw_member_bar(sub_df):
+    set_style()
+    # 排除空名，统计前10
+    member_counts = sub_df[sub_df["Sender"] != ""].groupby("Sender").size().sort_values(ascending=False).head(10)
+    
+    if member_counts.empty: return None
+    
+    names = [clean_text(n)[:10] for n in member_counts.index]
+    
+    # === 🎨 变色逻辑：我自己标蓝 ===
+    colors = []
+    for name in member_counts.index:
+        # 这里的 "Me" 要和你数据清洗时统一的名称一致 (Me 或 我)
+        if "Me" in name or "我" in name: 
+            colors.append(CONFIG["MAIN_COLOR"]) # 蓝色/青色
+        else:
+            colors.append(CONFIG["ACCENT_COLOR"]) # 红色/洋红
+    # ==============================
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    bars = ax.barh(range(len(member_counts)), member_counts.values, color=colors)
+    ax.invert_yaxis()
+    
+    ax.set_yticks(range(len(member_counts)))
+    ax.set_yticklabels(names, fontsize=10)
+    
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.set_xticks([])
+    
+    # 标数字
+    for bar in bars:
+        ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2, 
+                f"{int(bar.get_width())}", va='center', fontsize=9, color="#ccc")
+                
+    ax.set_title("Top 10 Active Members", loc='right', fontsize=10, color="#666")
+    return fig_to_base64(fig)
 
 # === 🟡 更新：分析循环 ===
-def analyze_subset(subset_df, limit=10, is_group=False): # 多了个 is_group 参数
+def analyze_subset(subset_df, limit=10, is_group=False):
     top_names = subset_df.groupby("NickName").size().sort_values(ascending=False).head(limit).index
     results = []
     
@@ -308,7 +452,7 @@ def analyze_subset(subset_df, limit=10, is_group=False): # 多了个 is_group �
         sub = subset_df[subset_df["NickName"] == name]
         print(f"    Processing #{rank}: {name}...")
         
-        # 只对群聊生成成员榜单图
+        # 👇 关键逻辑：如果是群聊，就调用上面的画图函数
         member_bar = None
         if is_group:
             member_bar = draw_member_bar(sub)
@@ -321,7 +465,7 @@ def analyze_subset(subset_df, limit=10, is_group=False): # 多了个 is_group �
             "heatmap": draw_heatmap(sub, "Activity"),
             "hourly": draw_hourly_curve(sub),
             "wordcloud": draw_wordcloud(sub),
-            "member_bar": member_bar # <--- 把图存进去
+            "member_bar": member_bar # 👈 必须把结果存进去！
         }
         results.append(item)
     return results
@@ -332,7 +476,7 @@ if __name__ == "__main__":
     if df.empty:
         exit()
 
-    print("🚀 [3/5] 计算全局统计...")
+    print("🚀 [2/4] 计算全局统计...")
 
     # ========= 时间范围 =========
     start_date = df["dt"].min().date()
@@ -395,6 +539,14 @@ if __name__ == "__main__":
     
     # --- 🔴 修改开始：增加群聊过滤逻辑 ---
     raw_df_g = df[df["ChatType"] == "Group"]
+        # ========= 全局（仅我自己） =========
+    df_me = df[df["IsSender"] == 1]
+
+    global_charts = {
+        "my_hourly": draw_hourly_curve(df_me),
+        "my_wordcloud": draw_wordcloud(df_me)
+    }
+
     
     # 1. 统计我在每个群发了多少条 (IsSender=1)
     my_sent_counts = raw_df_g[raw_df_g["IsSender"] == 1].groupby("NickName").size()
@@ -408,22 +560,33 @@ if __name__ == "__main__":
     print(f"🧹 过滤潜水群聊: 原有 {len(raw_df_g['NickName'].unique())} 个 -> 剩余 {len(active_group_names)} 个 (我发言>=10条)")
     # --- 🔴 修改结束 ---
 
+    print("📊 正在绘制年度趋势 & 全局词云...")
+    chart_me_trend = draw_line_chart(df[df["IsSender"]==1], "My Activity Trend (Sent Only)")
+    chart_global_wc = draw_wordcloud(df)
+
     charts = {
         "heatmap": draw_heatmap(df, "Annual Activity"),
         "rank_p": draw_rank_bar(df_p, "Top 10 Friends"),
-        "rank_g": draw_rank_bar(df_g, "Top 10 Groups") # 这里用的就是过滤后的 df_g
+        "rank_g": draw_rank_bar(df_g, "Top 10 Groups"),
+        "trend_me": chart_me_trend,       # <--- 新增
+        "wordcloud_global": chart_global_wc # <--- 新增
     }
-
-    print("🚀 [4/5] 生成【单聊】深度画像...")
-    p_profiles = analyze_subset(df_p, 10, is_group=False) # 传 False
     
-    print("🚀 [5/5] 生成【群聊】深度画像...")
-    g_profiles = analyze_subset(df_g, 10, is_group=True)  # 传 True
+# ... 在 step1_analyze.py 的最下面 ...
+
+    print("🚀 [3/4] 生成【单聊】深度画像...")
+    # 单聊不需要条形图，所以是 False
+    p_profiles = analyze_subset(df_p, 10, is_group=False)
+    
+    print("🚀 [4/4] 生成【群聊】深度画像...")
+    # 👇👇👇 必须检查这里！有没有写 is_group=True ？ 👇👇👇
+    g_profiles = analyze_subset(df_g, 10, is_group=True)
 
     # ... 下面的保存代码保持不变 ...
     data_package = {
         "metrics": metrics,
         "charts": charts,
+        "global_charts": global_charts,
         "private_profiles": p_profiles,
         "group_profiles": g_profiles
     }

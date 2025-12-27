@@ -16,6 +16,7 @@ metrics = data.get("metrics", {})
 charts = data.get("charts", {})
 p_profiles = data.get("private_profiles", [])
 g_profiles = data.get("group_profiles", [])
+global_charts = data.get("global_charts", {})
 
 # 1. 计算天数跨度 (days_span)
 try:
@@ -224,6 +225,18 @@ html = f"""
             </div>
         </div>
     </div>
+
+    <!-- ===== 我的全年行为总览 ===== -->
+    <div class="card">
+        <h3>🕒 我发消息的时间分布（全年）</h3>
+        <img src="data:image/png;base64,{global_charts.get('my_hourly', '')}">
+    </div>
+
+    <div class="card">
+        <h3>☁️ 我这一年的关键词</h3>
+        <img src="data:image/png;base64,{global_charts.get('my_wordcloud', '')}">
+    </div>
+
 
     <div class="card">
         <h3>📅 Annual Heatmap</h3>
