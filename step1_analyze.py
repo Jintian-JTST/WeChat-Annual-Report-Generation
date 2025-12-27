@@ -255,7 +255,52 @@ def load_data():
     print(f"✅ 分类结果: 单聊 {len(df[df['ChatType']=='Private'])} | 群聊 {len(df[df['ChatType']=='Group'])}")
     return df
 
-def analyze_subset(subset_df, limit=10):
+
+def draw_member_bar(sub_df):
+    set_style()
+    # 排除空名，统计前10
+    member_counts = sub_df[sub_df["Sender"] != ""].groupby("Sender").size().sort_values(ascending=False).head(10)
+    
+    if member_counts.empty: return None
+    
+    names = [clean_text(n)[:10] for n in member_counts.index]
+    
+    # === 🟢 修改点：给“Me”单独上色 ===
+    # 如果名字是 "Me" 或者 "我"，就用 MAIN_COLOR (蓝/青)，否则用 ACCENT_COLOR (红/粉)
+    colors = []
+    for name in member_counts.index:
+        if name == "Me" or name == "我": 
+            colors.append(CONFIG["MAIN_COLOR"]) # <--- 你的颜色
+        else:
+            colors.append(CONFIG["ACCENT_COLOR"]) # <--- 别人的颜色
+    # ================================
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+    
+    # 把 colors 列表传进去
+    bars = ax.barh(range(len(member_counts)), member_counts.values, color=colors)
+    ax.invert_yaxis()
+    
+    ax.set_yticks(range(len(member_counts)))
+    ax.set_yticklabels(names, fontsize=10)
+    
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_visible(False)
+    ax.spines['left'].set_visible(False)
+    ax.set_xticks([])
+    
+    # 标数字
+    for bar in bars:
+        ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2, 
+                f"{int(bar.get_width())}", va='center', fontsize=9, color="#ccc")
+                
+    ax.set_title("Top 10 Active Members", loc='right', fontsize=10, color="#666")
+    return fig_to_base64(fig)
+
+
+# === 🟡 更新：分析循环 ===
+def analyze_subset(subset_df, limit=10, is_group=False): # 多了个 is_group 参数
     top_names = subset_df.groupby("NickName").size().sort_values(ascending=False).head(limit).index
     results = []
     
@@ -263,17 +308,20 @@ def analyze_subset(subset_df, limit=10):
         sub = subset_df[subset_df["NickName"] == name]
         print(f"    Processing #{rank}: {name}...")
         
-        # 使用新的环形图函数
-        donut_chart = draw_donut_pair(sub)
-        
+        # 只对群聊生成成员榜单图
+        member_bar = None
+        if is_group:
+            member_bar = draw_member_bar(sub)
+
         item = {
             "rank": rank,
             "name": clean_text(name),
             "count": len(sub),
-            "heatmap": draw_heatmap(sub, "Activity Map"),
-            "compare": donut_chart, # 这里换成了环形图
+            "compare": draw_donut_pair(sub),
+            "heatmap": draw_heatmap(sub, "Activity"),
             "hourly": draw_hourly_curve(sub),
-            "wordcloud": draw_wordcloud(sub)
+            "wordcloud": draw_wordcloud(sub),
+            "member_bar": member_bar # <--- 把图存进去
         }
         results.append(item)
     return results
@@ -340,22 +388,39 @@ if __name__ == "__main__":
         "recv_ratio": recv_ratio
     }
 
-    # ========= 图表 =========
+# ... 上面的代码保持不变 ...
+
+    # ========= 图表数据准备 =========
     df_p = df[df["ChatType"] == "Private"]
-    df_g = df[df["ChatType"] == "Group"]
+    
+    # --- 🔴 修改开始：增加群聊过滤逻辑 ---
+    raw_df_g = df[df["ChatType"] == "Group"]
+    
+    # 1. 统计我在每个群发了多少条 (IsSender=1)
+    my_sent_counts = raw_df_g[raw_df_g["IsSender"] == 1].groupby("NickName").size()
+    
+    # 2. 找出那些我发言超过 10 条的群名
+    active_group_names = my_sent_counts[my_sent_counts >= 10].index
+    
+    # 3. 只保留这些活跃群
+    df_g = raw_df_g[raw_df_g["NickName"].isin(active_group_names)]
+    
+    print(f"🧹 过滤潜水群聊: 原有 {len(raw_df_g['NickName'].unique())} 个 -> 剩余 {len(active_group_names)} 个 (我发言>=10条)")
+    # --- 🔴 修改结束 ---
 
     charts = {
         "heatmap": draw_heatmap(df, "Annual Activity"),
         "rank_p": draw_rank_bar(df_p, "Top 10 Friends"),
-        "rank_g": draw_rank_bar(df_g, "Top 10 Groups")
+        "rank_g": draw_rank_bar(df_g, "Top 10 Groups") # 这里用的就是过滤后的 df_g
     }
 
     print("🚀 [4/5] 生成【单聊】深度画像...")
-    p_profiles = analyze_subset(df_p, 10)
-
+    p_profiles = analyze_subset(df_p, 10, is_group=False) # 传 False
+    
     print("🚀 [5/5] 生成【群聊】深度画像...")
-    g_profiles = analyze_subset(df_g, 10)
+    g_profiles = analyze_subset(df_g, 10, is_group=True)  # 传 True
 
+    # ... 下面的保存代码保持不变 ...
     data_package = {
         "metrics": metrics,
         "charts": charts,
@@ -368,42 +433,3 @@ if __name__ == "__main__":
         json.dump(data_package, f, ensure_ascii=False)
 
     print("\n✅ 完成！请运行 step2_render.py")
-
-    df = load_data()
-    
-    if not df.empty:
-        print("🚀 [3/5] 计算全局统计...")
-        metrics = {
-            "total": len(df),
-            "start": df["dt"].min().strftime("%Y.%m.%d"),
-            "end": df["dt"].max().strftime("%Y.%m.%d"),
-            "chars": int(df["StrContent"].str.len().sum())
-        }
-        
-        df_p = df[df["ChatType"] == "Private"]
-        df_g = df[df["ChatType"] == "Group"]
-        
-        charts = {
-            "heatmap": draw_heatmap(df, "Annual Activity"),
-            "rank_p": draw_rank_bar(df_p, "Top 10 Friends"),
-            "rank_g": draw_rank_bar(df_g, "Top 10 Groups")
-        }
-        
-        print("🚀 [4/5] 生成【单聊】深度画像...")
-        p_profiles = analyze_subset(df_p, 10)
-        
-        print("🚀 [5/5] 生成【群聊】深度画像...")
-        g_profiles = analyze_subset(df_g, 10)
-        
-        data_package = {
-            "metrics": metrics,
-            "charts": charts,
-            "private_profiles": p_profiles,
-            "group_profiles": g_profiles
-        }
-        
-        print("💾 保存数据到 report_data.json ...")
-        with open("report_data.json", "w", encoding="utf-8") as f:
-            json.dump(data_package, f)
-            
-        print("\n✅ 完成！请运行 step2_render.py")
