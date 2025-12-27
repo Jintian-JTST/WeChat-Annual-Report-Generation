@@ -67,63 +67,86 @@ html = f"""
 
 <style>
 :root {{
-    --bg: #0d0d0d;
-    --card: #161616;
-    --accent: #00aba5;
-    --text: #ccc;
+    --bg: #0b0e11;
+    --card: #12161c;
+    --accent: #00d1c1;
+    --accent-2: #ff4d6d;
+    --text: #cfd3dc;
+    --muted: #7a8392;
 }}
 
 body {{
     font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    background: var(--bg);
+    background: radial-gradient(circle at top, #111820, var(--bg));
     color: var(--text);
     max-width: 900px;
     margin: 0 auto;
-    padding: 40px;
+    padding: 48px 40px;
 }}
 
 h1 {{
     text-align: center;
     color: #fff;
-    font-size: 2.6em;
-    margin-bottom: 6px;
+    font-size: 2.8em;
+    margin-bottom: 8px;
 }}
 
 .sub {{
     text-align: center;
-    color: #666;
-    margin-bottom: 40px;
+    color: #7a8392;
+    margin-bottom: 64px;
     font-size: 0.9em;
-    letter-spacing: 1px;
+    letter-spacing: 1.5px;
 }}
 
+/* ===== 年度总览纵向布局 ===== */
 .hero {{
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 16px;
-    margin-bottom: 50px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    margin-bottom: 80px;
 }}
 
+/* ===== 单张统计卡片 ===== */
 .stat-box {{
-    background: #111;
-    border: 1px solid #222;
-    padding: 20px;
-    text-align: center;
-    border-radius: 10px;
+    background: linear-gradient(180deg, #151a21, #0f1318);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 22px;
+    padding: 38px 42px;
 }}
 
+/* 主数字 */
 .stat-val {{
-    font-size: 2em;
-    font-weight: bold;
-    color: #fff;
+    font-size: 4.4em;
+    font-weight: 900;
+    line-height: 1.05;
+    color: var(--accent);
+    letter-spacing: -0.03em;
 }}
 
+/* 副高亮（名字 / 次数字） */
+.stat-sub {{
+    margin-top: 12px;
+    font-size: 1.3em;
+    font-weight: 600;
+    color: #e6fefc;
+}}
+
+.stat-sub .highlight {{
+    color: var(--accent);
+    letter-spacing: 0.05em;
+}}
+
+/* 说明文字 */
 .stat-lbl {{
-    font-size: 0.8em;
-    color: #888;
-    margin-top: 6px;
+    margin-top: 14px;
+    font-size: 0.85em;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
 }}
 
+/* 其余保持原样 */
 .card {{
     background: var(--card);
     border: 1px solid #222;
