@@ -1,5 +1,4 @@
 import json
-import webbrowser
 import os
 from datetime import datetime
 
@@ -11,7 +10,7 @@ except FileNotFoundError:
     print("❌ 没找到数据！请先运行 step1_analyze.py")
     exit()
 
-# ===================== 1. 数据计算逻辑 =====================
+# ===================== 1. 数据准备 =====================
 metrics = data.get("metrics", {})
 charts = data.get("charts", {})
 p_profiles = data.get("private_profiles", [])
@@ -19,19 +18,18 @@ g_profiles = data.get("group_profiles", [])
 global_charts = data.get("global_charts", {})
 
 try:
-    start_date = metrics.get("start", "2025.01.01")
-    end_date = metrics.get("end", "2025.12.31")
-    s_d = datetime.strptime(start_date, "%Y.%m.%d")
-    e_d = datetime.strptime(end_date, "%Y.%m.%d")
-    days_span = (e_d - s_d).days + 1
+    s_d = datetime.strptime(metrics.get("start", "2025.01.01"), "%Y.%m.%d")
+    e_d = datetime.strptime(metrics.get("end", "2025.12.31"), "%Y.%m.%d")
+    start_date = metrics.get("start")
+    end_date = metrics.get("end")
 except:
     start_date = "2025.01.01"
     end_date = "2025.12.31"
-    days_span = 365
 
+# 基础数据
 total_msgs = metrics.get("total", 0)
-if "daily_avg" not in metrics:
-    metrics["daily_avg"] = int(total_msgs / days_span) if days_span > 0 else 0
+days_span = 365 
+metrics["daily_avg"] = int(total_msgs / days_span) if days_span > 0 else 0
 
 total_chars = metrics.get("chars", metrics.get("chars_total", 0))
 chars_sent = metrics.get("chars_sent", int(total_chars * 0.5))
@@ -42,48 +40,56 @@ craziest_count = metrics.get("craziest_count", 0)
 top_contact_name = metrics.get("top_contact_name", "N/A")
 top_contact_count = metrics.get("top_contact_count", 0)
 
-# ===================== 2. HTML 渲染函数 =====================
+# 书本换算
+books_written = chars_sent / 730000
+books_read = chars_recv / 200000
 
-def render_profiles(profile_list, title):
-    if not profile_list:
-        return ""
-    html_block = f'<h2 class="section-header scroll-item">{title}</h2>'
+# ===================== 2. HTML 渲染函数 (深度分析布局重构) =====================
+
+def render_profile_list(profile_list):
+    if not profile_list: return "<p style='text-align:center; color:#666'>无数据</p>"
+    html = ""
     for p in profile_list:
-        wc_html = (
-            f'<div class="viz-block"><img src="data:image/png;base64,{p["wordcloud"]}"></div>'
-            if p.get("wordcloud") else ""
-        )
-        member_html = ""
-        if p.get("member_bar"):
-            member_html = f"""
-            <div class="viz-block">
-                <div class="viz-label">🏆 群内最活跃成员</div>
-                <img src="data:image/png;base64,{p["member_bar"]}">
+        # 下方左右分栏逻辑：如果有词云，右边放词云；没有词云，左边的图表稍微居中一点
+        wc_img = f'<img src="data:image/png;base64,{p["wordcloud"]}">' if p.get("wordcloud") else ""
+        
+        # 布局结构：
+        # Row 1: Compare (饼图/对比图)
+        # Row 2: Heatmap (热力图)
+        # Row 3: Split (左:Hourly, 右:Wordcloud)
+        html += f"""
+        <div class="detail-card">
+            <div class="d-header">
+                <span class="d-rank">#{p["rank"]}</span>
+                <span class="d-name">{p["name"]}</span>
+                <span class="d-count">{p["count"]:,} 条</span>
             </div>
-            """
-        html_block += f"""
-        <div class="profile-item scroll-item">
-            <div class="profile-header">
-                <div>
-                    <span class="rank-badge">#{p["rank"]}</span>
-                    <span class="name-label">{p["name"]}</span>
-                </div>
-                <div class="count-label">{p["count"]:,} 条消息</div>
-            </div>
-            <div class="viz-block" style="background:none; border:none; padding:0;">
+            
+            <div class="viz-row-full">
+                <div class="viz-label">收发对比</div>
                 <img src="data:image/png;base64,{p["compare"]}">
             </div>
-            {member_html}
-            <div class="viz-block"><img src="data:image/png;base64,{p["heatmap"]}"></div>
-            <div class="grid-2">
-                <div class="viz-block"><img src="data:image/png;base64,{p["hourly"]}"></div>
-                {wc_html}
+
+            <div class="viz-row-full">
+                <div class="viz-label">全年活跃热力图</div>
+                <img src="data:image/png;base64,{p["heatmap"]}">
+            </div>
+
+            <div class="viz-row-split">
+                <div class="viz-half">
+                    <div class="viz-label">24小时作息</div>
+                    <img src="data:image/png;base64,{p["hourly"]}">
+                </div>
+                <div class="viz-half">
+                    <div class="viz-label">专属关键词</div>
+                    {wc_img}
+                </div>
             </div>
         </div>
         """
-    return html_block
+    return html
 
-# ===================== 3. HTML 主体 (视差滚动版) =====================
+# ===================== 3. HTML 主体 =====================
 
 html = f"""
 <!DOCTYPE html>
@@ -94,301 +100,274 @@ html = f"""
 <title>2025 微信年度报告</title>
 <style>
     :root {{
-        --bg: #0b0b0b;
-        --card-bg: #141414;
-        --blue-accent: #00e5ff;
-        --red-accent: #ff4d6d;
-        --text-main: #ffffff;
-        --text-sub: rgba(255,255,255,0.6);
+        --bg: #000000;
+        --card-bg: #111;
+        --text: #ffffff;
+        --accent-blue: #00f2ff;
+        --accent-purple: #bd00ff;
+        --accent-red: #ff3366;
+        --accent-gold: #ffd700;
+        --accent-green: #00ff88;
     }}
 
+    * {{ box-sizing: border-box; }}
+    
     body {{
-        font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+        margin: 0; padding: 0;
+        font-family: 'PingFang SC', 'Microsoft YaHei', 'Segoe UI', sans-serif;
         background: var(--bg);
-        color: var(--text-main);
-        margin: 0;
-        padding: 0;
-        overflow-x: hidden;
+        color: var(--text);
+        overflow: hidden; 
     }}
 
-    /* === 核心布局：视差效果 === */
-    
-    /* 1. 封面层：固定在背后，不动 */
-    .intro-screen {{
-        position: fixed; /* 关键：固定定位 */
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100vh;
-        z-index: 1; /* 层级最低 */
-        
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        text-align: center;
-        background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
+    .snap-container {{
+        height: 100vh; width: 100%;
+        overflow-y: scroll;
+        scroll-snap-type: y mandatory;
+        scroll-behavior: smooth;
     }}
 
-    /* 2. 内容层：背景不透明，初始位置在屏幕下方 */
-    .main-wrapper {{
+    .section {{
+        height: 100vh; width: 100%;
+        scroll-snap-align: start;
         position: relative;
-        z-index: 10; /* 层级高，盖住封面 */
-        background-color: var(--bg); /* 必须有背景色，否则是透明的 */
-        margin-top: 100vh; /* 关键：把内容顶到第二屏 */
-        
-        padding-top: 60px; /* 内容顶部的留白 */
-        padding-bottom: 100px;
-        min-height: 100vh;
-        
-        /* 顶部阴影，增加层次感，像一张纸盖上来 */
-        box-shadow: 0 -20px 50px rgba(0,0,0, 1); 
-        border-top: 1px solid #333;
-        border-radius: 24px 24px 0 0; /* 顶部圆角 */
-    }}
-
-    .container {{
-        max-width: 900px;
-        margin: 0 auto;
-        padding: 0 20px;
-    }}
-
-    /* === 封面动画元素 === */
-    .intro-title {{
-        font-size: 4.5em;
-        font-weight: 900;
-        margin: 0;
-        background: linear-gradient(45deg, var(--blue-accent), #fff, var(--red-accent));
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        animation: fadeInDown 1.5s ease-out;
-    }}
-
-    .intro-sub {{
-        font-size: 1.3em;
-        color: var(--text-sub);
-        margin-top: 20px;
-        letter-spacing: 5px;
-        animation: fadeInUp 1.5s ease-out;
-    }}
-
-    .scroll-hint {{
-        position: absolute;
-        bottom: 50px;
-        color: var(--text-sub);
-        font-size: 0.9em;
-        animation: bounce 2s infinite;
-        opacity: 0.8;
-    }}
-
-    /* === 滚动触发动画 (Scroll Reveal) === */
-    .scroll-item {{
-        opacity: 0;
-        transform: translateY(60px) scale(0.98); /* 稍微缩小一点，更有弹出的感觉 */
-        transition: all 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }}
-
-    .scroll-item.visible {{
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }}
-
-    /* === 卡片与图表样式 === */
-    .hero-grid {{
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 25px;
-        margin-bottom: 80px;
-    }}
-
-    .stat-card {{
-        display: flex;
-        flex-direction: column;
-        min-height: 320px;
-        border-radius: 16px;
+        display: flex; flex-direction: column;
+        justify-content: center; align-items: center;
+        padding: 20px;
+        border-bottom: 1px solid #1a1a1a;
         overflow: hidden;
-        border: 1px solid #222;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        background: var(--card-bg);
     }}
 
-    .card-top {{
-        flex: 1;
-        background: linear-gradient(180deg, rgba(0,229,255,0.1), rgba(0,0,0,0));
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        padding: 20px;
-    }}
-
-    .card-bottom {{
-        flex: 1;
-        background: linear-gradient(0deg, rgba(255,77,109,0.1), rgba(0,0,0,0));
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        padding: 20px;
-    }}
-
-    .stat-val {{ font-size: 2.2em; font-weight: bold; margin-bottom: 8px; color: #fff; text-align: center; }}
-    .stat-lbl {{ font-size: 0.9em; color: var(--text-sub); letter-spacing: 1px; text-transform: uppercase; }}
-
-    .card {{
-        background: var(--card-bg);
-        border: 1px solid #222;
-        padding: 24px;
-        border-radius: 16px;
-        margin-bottom: 40px;
-    }}
-    .card h3 {{
-        margin-top: 0; color: #fff; border-left: 4px solid var(--blue-accent);
-        padding-left: 12px; font-size: 1.3em; margin-bottom: 20px;
-    }}
-
-    .section-header {{ text-align: center; margin: 80px 0 40px 0; color: #fff; font-size: 2em; font-weight: bold; }}
+    /* 动画 */
+    .anim-fade {{ opacity: 0; transform: translateY(40px); transition: all 0.8s ease-out; }}
+    .anim-scale {{ opacity: 0; transform: scale(0.9); transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); }}
     
-    .profile-item {{
-        background: #111; border: 1px solid #222; padding: 25px; border-radius: 16px; margin-bottom: 50px;
-    }}
-    .profile-header {{
-        display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; padding-bottom: 15px; margin-bottom: 20px;
-    }}
-    .rank-badge {{ background: #333; color: #fff; padding: 4px 10px; border-radius: 6px; font-weight: bold; }}
-    .name-label {{ font-size: 1.4em; font-weight: bold; color: #fff; margin-left: 10px; }}
-    .count-label {{ color: var(--blue-accent); font-size: 1.2em; font-family: monospace; font-weight: bold; }}
-    
-    .grid-2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }}
-    .viz-block {{ margin-bottom: 15px; background: #0f0f0f; border-radius: 8px; padding: 10px; border: 1px solid #1a1a1a; }}
-    .viz-label {{ font-size: 0.85em; color: #666; margin-bottom: 8px; text-align: center; }}
-    img {{ width: 100%; border-radius: 6px; display: block; }}
+    .section.active .anim-fade {{ opacity: 1; transform: translateY(0); }}
+    .section.active .anim-scale {{ opacity: 1; transform: scale(1); }}
 
-    /* 动画定义 */
-    @keyframes bounce {{ 0%, 20%, 50%, 80%, 100% {{transform: translateY(0);}} 40% {{transform: translateY(-10px);}} 60% {{transform: translateY(-5px);}} }}
-    @keyframes fadeInDown {{ from {{opacity:0; transform:translateY(-30px);}} to {{opacity:1; transform:translateY(0);}} }}
-    @keyframes fadeInUp {{ from {{opacity:0; transform:translateY(30px);}} to {{opacity:1; transform:translateY(0);}} }}
+    /* Title 渐变回归 */
+    .intro-title {{
+        font-size: 4.5rem; font-weight: 900; line-height: 1.1; text-align: center;
+        background: linear-gradient(135deg, #ff3366 0%, #ffffff 50%, #00f2ff 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        margin-bottom: 20px;
+    }}
+    .sub-text {{ color: #888; font-size: 1.2rem; margin-top: 10px; letter-spacing: 2px; }}
+
+    /* 字体优化 */
+    .hero-val, .split-num {{
+        font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; /* 统一字体 */
+        font-weight: 800;
+    }}
+
+    /* 卡片通用 */
+    .hero-card {{
+        background: rgba(20,20,20,0.9);
+        border: 1px solid #333; border-radius: 24px;
+        padding: 30px; width: 100%; max-width: 500px;
+        text-align: center;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    }}
+    
+    .hero-lbl {{ font-size: 1.6rem; color: #ffffff; font-weight: bold; margin-bottom: 10px; }}
+    .hero-val {{ font-size: 4.5rem; line-height: 1; margin: 15px 0; }}
+    .unit {{ font-size: 1.5rem; margin-left: 5px; color: #ccc; font-weight: normal; }}
+
+    /* 颜色变体 */
+    .c-blue .hero-val {{ color: var(--accent-blue); text-shadow: 0 0 25px rgba(0,242,255,0.4); }}
+    .c-green .hero-val {{ color: var(--accent-green); text-shadow: 0 0 25px rgba(0,255,136,0.4); }}
+    .c-gold .hero-val {{ color: var(--accent-gold); text-shadow: 0 0 25px rgba(255,215,0,0.4); }}
+    
+    /* 双卡片布局 */
+    .dual-wrapper {{ display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 500px; }}
+    .split-card {{
+        background: #111; border: 1px solid #333; border-radius: 20px;
+        padding: 25px; display: flex; flex-direction: column; justify-content: center;
+        flex: 1; text-align: left; position: relative; overflow: hidden;
+    }}
+    .split-card::after {{
+        content: ''; position: absolute; right: -20px; top: -20px; width: 100px; height: 100px;
+        background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, rgba(0,0,0,0) 70%); border-radius: 50%;
+    }}
+    .split-label {{ font-size: 1.4rem; color: #fff; margin-bottom: 5px; font-weight: bold; }}
+    .split-num {{ font-size: 3rem; margin-bottom: 5px; position: relative; z-index: 2; }}
+    .split-desc {{ font-size: 1rem; color: #888; position: relative; z-index: 2; }}
+
+    /* 疯狂日 */
+    .crazy-box {{ text-align: center; }}
+    .crazy-date {{ font-size: 2rem; color: #fff; margin-bottom: 10px; }}
+    .crazy-count {{ 
+        font-size: 7rem; font-weight: 900; line-height: 1; margin: 10px 0;
+        background: linear-gradient(to top, #ff0000, #ff8800);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        filter: drop-shadow(0 0 15px rgba(255,50,50,0.5));
+        font-family: 'Segoe UI', sans-serif;
+    }}
+
+    /* 图表页：尺寸放大 */
+    .chart-box {{
+        width: 100%; 
+        max-width: 1000px; /* 放大到 1000px */
+        background: #111; padding: 20px; border-radius: 16px; border: 1px solid #222;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }}
+    .page-title {{ font-size: 2rem; margin-bottom: 25px; font-weight: bold; color: #fff; text-align: center; }}
+    img {{ width: 100%; height: auto; border-radius: 8px; display: block; }}
+
+    /* 详细列表页新布局 */
+    .section.scrollable {{ display: block; overflow-y: auto; padding-top: 80px; padding-bottom: 100px; }}
+    
+    .detail-card {{ 
+        background: #161616; border: 1px solid #222; padding: 25px; 
+        border-radius: 16px; margin: 0 auto 40px; max-width: 900px; /* 列表卡片也宽一点 */
+    }}
+    .d-header {{ display: flex; align-items: center; border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 20px; }}
+    .d-rank {{ background: #333; padding: 4px 10px; border-radius: 6px; margin-right: 15px; font-weight: bold; }}
+    .d-name {{ font-weight: bold; font-size: 1.4rem; flex: 1; color: #fff; }}
+    .d-count {{ color: var(--accent-blue); font-weight: bold; font-size: 1.2rem; }}
+    
+    .viz-label {{ color: #666; font-size: 0.9rem; margin-bottom: 8px; text-align: center; }}
+    .viz-row-full {{ margin-bottom: 25px; background: #0b0b0b; padding: 15px; border-radius: 10px; }}
+    .viz-row-split {{ display: flex; gap: 20px; }}
+    .viz-half {{ flex: 1; background: #0b0b0b; padding: 15px; border-radius: 10px; }}
+
+    .arrow {{ position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 1.5rem; color: #444; animation: float 2s infinite; }}
+    @keyframes float {{ 0%,100%{{transform:translate(-50%,0)}} 50%{{transform:translate(-50%,10px)}} }}
 </style>
 </head>
-
 <body>
 
-<div class="intro-screen" id="intro">
-    <div class="intro-title">2025<br>微信年度报告</div>
-    <div class="intro-sub">{start_date} - {end_date}</div>
-    <div class="scroll-hint">向下滑动查看详情 ▼</div>
-</div>
+<div class="snap-container">
 
-<div class="main-wrapper">
-    <div class="container">
-        
-        <div class="hero-grid">
-            <div class="stat-card scroll-item" style="transition-delay: 0s;">
-                <div class="card-top blue">
-                    <div class="stat-val">{total_msgs:,}</div>
-                    <div class="stat-lbl">📨 年度消息总数</div>
+    <section class="section">
+        <div class="intro-title anim-scale">2025<br>微信年度报告</div>
+        <div class="sub-text anim-fade" style="transition-delay:0.2s">{start_date} - {end_date}</div>
+        <div class="arrow">﹀</div>
+    </section>
+
+    <section class="section">
+        <div class="hero-card c-blue anim-scale">
+            <div class="hero-lbl">年度总消息</div>
+            <div class="hero-val">{total_msgs:,}<span class="unit">条</span></div>
+            <div class="sub-text">无论废话还是情话，都是回忆</div>
+        </div>
+        <div class="arrow">﹀</div>
+    </section>
+
+    <section class="section">
+        <div class="hero-card c-green anim-scale">
+            <div class="hero-lbl">平均每天发送</div>
+            <div class="hero-val">{metrics["daily_avg"]:,}<span class="unit">条</span></div>
+            <div class="sub-text">这就是你生活的节奏</div>
+        </div>
+        <div class="arrow">﹀</div>
+    </section>
+
+    <section class="section">
+        <div class="page-title anim-fade">文字产出量</div>
+        <div class="dual-wrapper">
+            <div class="split-card anim-scale" style="border-left: 5px solid var(--accent-purple);">
+                <div class="split-label">📤 我发送的</div>
+                <div class="split-num" style="color:var(--accent-purple)">
+                    {chars_sent:,} <span class="unit" style="font-size:1rem">字</span>
                 </div>
-                <div class="card-bottom red">
-                    <div class="stat-val">{metrics["daily_avg"]:,}</div>
-                    <div class="stat-lbl">📅 日均消息数</div>
-                </div>
+                <div class="split-desc">相当于写了 <span style="color:#fff; font-weight:bold;">{books_written:.1f}</span> 本《红楼梦》</div>
             </div>
 
-            <div class="stat-card scroll-item" style="transition-delay: 0.1s;">
-                <div class="card-top blue">
-                    <div class="stat-val">{chars_sent:,}</div>
-                    <div class="stat-lbl">📤 我发送的字数</div>
+            <div class="split-card anim-scale" style="border-left: 5px solid var(--accent-blue); transition-delay: 0.1s;">
+                <div class="split-label">📥 我接收的</div>
+                <div class="split-num" style="color:var(--accent-blue)">
+                    {chars_recv:,} <span class="unit" style="font-size:1rem">字</span>
                 </div>
-                <div class="card-bottom red">
-                    <div class="stat-val">{chars_recv:,}</div>
-                    <div class="stat-lbl">📥 接收的字数</div>
-                </div>
-            </div>
-
-            <div class="stat-card scroll-item" style="transition-delay: 0.2s;">
-                <div class="card-top blue">
-                    <div class="stat-val">{craziest_day}</div>
-                    <div class="stat-lbl">🔥 消息最密集的一天</div>
-                </div>
-                <div class="card-bottom red">
-                    <div class="stat-val">{craziest_count:,}</div>
-                    <div class="stat-lbl">当日消息数</div>
-                </div>
-            </div>
-
-            <div class="stat-card scroll-item" style="transition-delay: 0.3s;">
-                <div class="card-top blue">
-                    <div class="stat-val" style="font-size: 1.8em;">{top_contact_name}</div>
-                    <div class="stat-lbl">❤️ 联系最频繁的人</div>
-                </div>
-                <div class="card-bottom red">
-                    <div class="stat-val">{top_contact_count:,}</div>
-                    <div class="stat-lbl">你和 Ta 的消息总数</div>
-                </div>
+                <div class="split-desc">相当于读了 <span style="color:#fff; font-weight:bold;">{books_read:.1f}</span> 本《三体》</div>
             </div>
         </div>
+        <div class="arrow">﹀</div>
+    </section>
 
-        <div class="card scroll-item">
-            <h3>🕒 我发消息的时间分布（全年）</h3>
+    <section class="section">
+        <div class="hero-card anim-scale" style="border:none; background:none; box-shadow:none;">
+            <div class="hero-lbl">🔥 消息最爆炸的一天</div>
+            <div class="crazy-box">
+                <div class="crazy-count">{craziest_count:,}</div>
+                <div class="crazy-date">{craziest_day}</div>
+            </div>
+            <div class="sub-text">这一天，你的手指一定很累吧</div>
+        </div>
+        <div class="arrow">﹀</div>
+    </section>
+
+    <section class="section">
+        <div class="hero-card c-gold anim-scale">
+            <div class="hero-lbl">❤️ 年度最亲密</div>
+            <div class="hero-val" style="font-size: 3.5rem;">{top_contact_name}</div>
+            <div class="sub-text">你们一共互动了 <span style="color:#fff; font-weight:bold;">{top_contact_count:,}</span> 条消息</div>
+        </div>
+        <div class="arrow">﹀</div>
+    </section>
+
+    <section class="section">
+        <div class="page-title anim-fade">你的作息规律</div>
+        <div class="chart-box anim-scale" style="transition-delay:0.1s">
             <img src="data:image/png;base64,{global_charts.get("my_hourly","")}">
         </div>
+        <div class="arrow">﹀</div>
+    </section>
 
-        <div class="card scroll-item">
-            <h3>☁️ 我这一年的关键词</h3>
+    <section class="section">
+        <div class="page-title anim-fade">你的年度关键词</div>
+        <div class="chart-box anim-scale" style="transition-delay:0.1s">
             <img src="data:image/png;base64,{global_charts.get("my_wordcloud","")}">
         </div>
+        <div class="arrow">﹀</div>
+    </section>
 
-        <div class="card scroll-item">
-            <h3>📅 全年活跃热力图</h3>
-            <img src="data:image/png;base64,{charts.get("heatmap","")}">
-        </div>
-
-        <div class="card scroll-item">
-            <h3>🏆 聊天最频繁的 10 位好友</h3>
+    <section class="section">
+        <div class="page-title anim-fade">Top 10 好友排行</div>
+        <div class="chart-box anim-scale" style="transition-delay:0.1s">
             <img src="data:image/png;base64,{charts.get("rank_p","")}">
         </div>
+        <div class="arrow">﹀</div>
+    </section>
 
-        <div class="card scroll-item">
-            <h3>📢 最活跃的 10 个群聊</h3>
+    <section class="section">
+        <div class="page-title anim-fade">Top 10 群聊排行</div>
+        <div class="chart-box anim-scale" style="transition-delay:0.1s">
             <img src="data:image/png;base64,{charts.get("rank_g","")}">
         </div>
+        <div class="arrow">﹀</div>
+    </section>
 
-        {render_profiles(p_profiles, "👤 好友聊天深度分析")}
-        {render_profiles(g_profiles, "👥 群聊活跃度分析")}
-
-        <div style="height: 100px; text-align:center; color:#555; padding-top:50px;">
-            <p>Generated by WeChat Report 2025</p>
+    <section class="section scrollable">
+        <div style="text-align:center; margin-bottom:40px;">
+            <div class="page-title anim-fade">📋 深度分析报告</div>
+            <div class="sub-text anim-fade">向下滚动查看所有人详情</div>
         </div>
-    </div>
+
+        <div class="anim-fade" style="transition-delay:0.2s">
+            <h3 style="text-align:center; color:var(--accent-blue)">👤 好友详情</h3>
+            {render_profile_list(p_profiles)}
+            
+            <h3 style="text-align:center; color:var(--accent-green); margin-top:80px;">👥 群聊详情</h3>
+            {render_profile_list(g_profiles)}
+        </div>
+
+        <div style="text-align:center; padding: 60px 0; color: #444;">— End —</div>
+    </section>
+
 </div>
 
 <script>
-    // 1. 滚动显现动画
     const observer = new IntersectionObserver((entries) => {{
         entries.forEach(entry => {{
             if (entry.isIntersecting) {{
-                entry.target.classList.add('visible');
-                observer.unobserve(entry.target);
+                entry.target.classList.add('active');
             }}
         }});
-    }}, {{ threshold: 0.1, rootMargin: "0px 0px -50px 0px" }});
+    }}, {{ threshold: 0.5 }});
 
-    document.querySelectorAll('.scroll-item').forEach((el) => {{
-        observer.observe(el);
-    }});
-
-    // 2. 封面淡出效果（可选：为了更丝滑，让封面在被盖住时变暗）
-    window.addEventListener('scroll', () => {{
-        const scrollY = window.scrollY;
-        const intro = document.getElementById('intro');
-        if (scrollY < window.innerHeight) {{
-            // 随着滚动，封面透明度降低，且轻微缩小
-            const opacity = 1 - (scrollY / window.innerHeight);
-            const scale = 1 - (scrollY / window.innerHeight) * 0.1; 
-            intro.style.opacity = opacity;
-            intro.style.transform = `scale(${{scale}})`;
-        }}
+    document.querySelectorAll('.section').forEach(section => {{
+        observer.observe(section);
     }});
 </script>
 
@@ -399,5 +378,10 @@ html = f"""
 with open("Final_Report.html", "w", encoding="utf-8") as f:
     f.write(html)
 
-print(f"✅ 视差覆盖风格报告已生成！")
-print("👉 请打开 Final_Report.html 体验效果：封面固定，内容从底部覆盖滑入。")
+print(f"✅ 完美版报告已生成！")
+print("1. 标题已恢复红蓝渐变。")
+print("2. 字体统一为粗圆体。")
+print("3. 中间图表（作息/词云/Rank）已放大到巨幕尺寸。")
+print("4. 已新增第10页：群聊 Top 10 排行榜。")
+print("5. 深度分析已改为：上饼图、中热力、下左右分栏结构。")
+print("👉 双击 Final_Report.html 即可体验。")
