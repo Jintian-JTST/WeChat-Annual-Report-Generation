@@ -295,8 +295,8 @@ html = f"""
 
 <body>
 
-<h1>2025 年度回顾</h1>
-<div class="sub">{metrics.get("start","N/A")} - {metrics.get("end","N/A")} · 微信数据全景报告</div>
+<h1>2025 年度微信回顾</h1>
+<div class="sub">{metrics.get("start","N/A")} - {metrics.get("end","N/A")}</div>
 
 <div class="hero-grid">
     

@@ -54,7 +54,7 @@ def fig_to_base64(fig):
 # ===================== 核心：绘图函数 =====================
 
 def draw_donut_pair(df):
-    """画两个并排的环形图：左边Msg，右边Char"""
+    """画两个并排的环形图：左边消息数，右边字数"""
     set_style()
     
     # 数据准备
@@ -66,16 +66,15 @@ def draw_donut_pair(df):
     m_chars = me["StrContent"].str.len().sum()
     o_chars = other["StrContent"].str.len().sum()
     
-    # 避免全0报错
     if m_count + o_count == 0: m_count = 1
     if m_chars + o_chars == 0: m_chars = 1
     
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
     
-    colors = [CONFIG["MAIN_COLOR"], CONFIG["ACCENT_COLOR"]] # 青色 vs 洋红
-    labels = ["Me", "Ta"]
+    colors = [CONFIG["MAIN_COLOR"], CONFIG["ACCENT_COLOR"]] 
+    labels = ["我", "对方"]  # 汉化
     
-    # --- 辅助函数：画单个甜甜圈 ---
+    # --- 辅助函数 ---
     def plot_donut(ax, data, total_val, title):
         wedges, texts, autotexts = ax.pie(
             data, 
@@ -83,29 +82,23 @@ def draw_donut_pair(df):
             colors=colors, 
             autopct='%1.1f%%', 
             startangle=90, 
-            pctdistance=0.85, # 百分比距离圆心的距离
-            wedgeprops=dict(width=0.3, edgecolor=CONFIG["BG_COLOR"]), # width=0.3 变成环形
+            pctdistance=0.85, 
+            wedgeprops=dict(width=0.3, edgecolor=CONFIG["BG_COLOR"]), 
             textprops=dict(color="white", fontsize=10)
         )
-        
-        # 修改字体颜色
         for text in texts: text.set_color(CONFIG["AXIS_COLOR"])
         for autotext in autotexts: autotext.set_color("white"); autotext.set_fontsize(9)
         
-        # 中心写总量
         ax.text(0, 0, f"{total_val:,}", ha='center', va='center', fontsize=12, fontweight='bold', color='white')
         ax.set_title(title, pad=10, color=CONFIG["AXIS_COLOR"], fontsize=11)
 
-    # 1. Msg Count Donut
-    plot_donut(ax1, [m_count, o_count], m_count+o_count, "Messages")
-    
-    # 2. Char Count Donut
-    plot_donut(ax2, [m_chars, o_chars], m_chars+o_chars, "Characters")
+    plot_donut(ax1, [m_count, o_count], m_count+o_count, "消息条数")
+    plot_donut(ax2, [m_chars, o_chars], m_chars+o_chars, "总字符数")
     
     return fig_to_base64(fig)
 
 
-def draw_heatmap(df, label="Activity"):
+def draw_heatmap(df, label="活跃度"):
     set_style()
     dates = df.groupby("Date").size()
     full_range = pd.date_range(f"{CONFIG['TARGET_YEAR']}-01-01", f"{CONFIG['TARGET_YEAR']}-12-31")
@@ -134,7 +127,7 @@ def draw_heatmap(df, label="Activity"):
         linecolor=CONFIG["BG_COLOR"]
     )
 
-    # 月份刻度
+    # 月份刻度汉化
     month_starts = (
         chart_data
         .groupby(chart_data["Timestamp"].dt.to_period("M"))["week"]
@@ -142,13 +135,16 @@ def draw_heatmap(df, label="Activity"):
     )
 
     ax.set_xticks(month_starts.values + 0.5)
-    ax.set_xticklabels(
-        month_starts.index.strftime("%b"),
-        fontsize=9
-    )
+    # 使用数字月份，如 "1月"
+    month_labels = [f"{m}月" for m in range(1, 13)]
+    # 如果数据不满一年，需要截断，这里简单处理直接用 index 的月份
+    real_months = chart_data["Timestamp"].dt.month.unique()
+    month_labels = [f"{m}月" for m in real_months]
+    
+    ax.set_xticklabels(month_labels, fontsize=9)
 
     ax.set_yticks([0.5, 3.5, 6.5])
-    ax.set_yticklabels(["Mon", "Thu", "Sun"], rotation=0, fontsize=9)
+    ax.set_yticklabels(["周一", "周四", "周日"], rotation=0, fontsize=9) # 汉化
     ax.set_xticks([])
     ax.set_xlabel("")
     ax.set_ylabel("")
@@ -163,19 +159,19 @@ def draw_hourly_curve(df):
     ax.plot(hourly.index, hourly.values, color=CONFIG["MAIN_COLOR"], linewidth=2)
     ax.fill_between(hourly.index, hourly.values, color=CONFIG["MAIN_COLOR"], alpha=0.2)
     ax.set_xticks([0, 6, 12, 18, 23])
-    ax.set_xticklabels(["0h", "6h", "12h", "18h", "23h"])
+    ax.set_xticklabels(["0点", "6点", "12点", "18点", "23点"]) # 汉化
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['left'].set_visible(False)
     ax.set_yticks([])
-    ax.set_title("24H Trend", loc='right', fontsize=10, color="#666")
+    ax.set_title("24小时活跃分布", loc='right', fontsize=10, color="#666") # 汉化
     return fig_to_base64(fig)
 
 def draw_wordcloud(df):
     text = " ".join(df["StrContent"].astype(str).tolist())
     text = re.sub(r"[A-Za-z0-9\[\]]", "", text)
 
-    # === 1. 基础停用词（聊天高频废话）===
+    # === 1. 停用词 ===
     stopwords = set([
         "这个","那个","不是","没有","然后","怎么","现在","知道","我们",
         "你们","他们","一个","一下","这样","那样","如果","因为","所以",
@@ -222,20 +218,13 @@ def draw_wordcloud(df):
         "（","）","【","】","…","—"
     ])
 
-    # === 2. 分词 + 过滤 ===
     words = []
     for w in jieba.cut(text):
-        if len(w) < 2:
-            continue
-        if w in stopwords:
-            continue
-        # 过滤纯虚词模式
-        if re.fullmatch(r"[这那什怎没不还已]*", w):
-            continue
+        if len(w) < 2 or w in stopwords: continue
+        if re.fullmatch(r"[这那什怎没不还已]*", w): continue
         words.append(w)
 
-    if not words:
-        return None
+    if not words: return None
 
     font_path = "msyh.ttc"
     if platform.system() == "Darwin":
@@ -253,7 +242,7 @@ def draw_wordcloud(df):
     fig, ax = plt.subplots(figsize=(10, 3.5))
     ax.imshow(wc, interpolation="bilinear")
     ax.axis("off")
-    ax.set_title("Keywords", loc="right", fontsize=10, color="#666")
+    ax.set_title("年度关键词", loc="right", fontsize=10, color="#666") # 汉化
 
     return fig_to_base64(fig)
 
@@ -282,31 +271,19 @@ def draw_rank_bar(df, title):
 
 # ===================== 严格分类逻辑 =====================
 def apply_strict_classification(df):
-    print("   执行严格分类 (ID + 人数 + 关键词)...")
-    
-    # 1. 默认全单聊
+    print("   🔍 执行严格分类 (ID + 人数 + 关键词)...")
     df["ChatType"] = "Private"
     
-    # 2. 标记所有明确的群聊 (ID含@chatroom)
     if "TalkerId" in df.columns:
         df.loc[df["TalkerId"].astype(str).str.contains("chatroom"), "ChatType"] = "Group"
     if "StrTalker" in df.columns:
         df.loc[df["StrTalker"].astype(str).str.contains("chatroom"), "ChatType"] = "Group"
-        
-    # 2.5 兜底：NickName 本身是 chatroom ID 的，一律视为群聊
-    df.loc[
-        df["NickName"].astype(str).str.contains(r"@chatroom", na=False),
-        "ChatType"
-    ] = "Group"
+    df.loc[df["NickName"].astype(str).str.contains(r"@chatroom", na=False), "ChatType"] = "Group"
 
-
-    # 3. 标记所有多人说话的会话
-    # 逻辑：如果一个 NickName 下面，除去 'Me' 和 'Unknown'，还有超过1个不同的 Sender，那就是群
     senders_per_chat = df[df["IsSender"]==0].groupby("NickName")["Sender"].nunique()
     group_names = senders_per_chat[senders_per_chat > 1].index
     df.loc[df["NickName"].isin(group_names), "ChatType"] = "Group"
     
-    # 4. 关键词兜底 (解决漏网之鱼)
     keywords = ["群", "Group", "Team", "Offer", "指南", "2025", "25fall", "表白墙", "二手"]
     pattern = "|".join(keywords)
     df.loc[df["NickName"].str.contains(pattern, case=False, na=False), "ChatType"] = "Group"
@@ -338,121 +315,65 @@ def load_data():
         df["Sender"] = df["Sender"].fillna("Unknown")
         df.loc[df["IsSender"] == 1, "Sender"] = "Me"
 
-    # 执行分类
     df = apply_strict_classification(df)
 
     print(f"✅ 分类结果: 单聊 {len(df[df['ChatType']=='Private'])} | 群聊 {len(df[df['ChatType']=='Group'])}")
     return df
 
-
-def draw_member_bar(sub_df):
-    set_style()
-    # 排除空名，统计前10
-    member_counts = sub_df[sub_df["Sender"] != ""].groupby("Sender").size().sort_values(ascending=False).head(10)
-    
-    if member_counts.empty: return None
-    
-    names = [clean_text(n)[:10] for n in member_counts.index]
-    
-    # === 🟢 修改点：给“Me”单独上色 ===
-    # 如果名字是 "Me" 或者 "我"，就用 MAIN_COLOR (蓝/青)，否则用 ACCENT_COLOR (红/粉)
-    colors = []
-    for name in member_counts.index:
-        if name == "Me" or name == "我": 
-            colors.append(CONFIG["MAIN_COLOR"]) # <--- 你的颜色
-        else:
-            colors.append(CONFIG["ACCENT_COLOR"]) # <--- 别人的颜色
-    # ================================
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-    
-    # 把 colors 列表传进去
-    bars = ax.barh(range(len(member_counts)), member_counts.values, color=colors)
-    ax.invert_yaxis()
-    
-    ax.set_yticks(range(len(member_counts)))
-    ax.set_yticklabels(names, fontsize=10)
-    
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
-    ax.spines['left'].set_visible(False)
-    ax.set_xticks([])
-    
-    # 标数字
-    for bar in bars:
-        ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2, 
-                f"{int(bar.get_width())}", va='center', fontsize=9, color="#ccc")
-                
-    ax.set_title("Top 10 Active Members", loc='right', fontsize=10, color="#666")
-    return fig_to_base64(fig)
-
-# === 新增：年度走势图 ===
+# === 趋势图 ===
 def draw_line_chart(df, title):
     set_style()
     daily_counts = df.groupby("Date").size()
-    # 补全日期确保连续
     idx = pd.date_range(f"{CONFIG['TARGET_YEAR']}-01-01", f"{CONFIG['TARGET_YEAR']}-12-31")
     daily_counts = daily_counts.reindex(idx, fill_value=0)
     
     fig, ax = plt.subplots(figsize=(12, 3.5))
     ax.plot(daily_counts.index, daily_counts.values, color=CONFIG["MAIN_COLOR"], linewidth=1.5)
     ax.fill_between(daily_counts.index, daily_counts.values, color=CONFIG["MAIN_COLOR"], alpha=0.1)
-    ax.axis('off') # 极简模式，去掉坐标轴
+    ax.axis('off')
     ax.set_title(title, loc='left', fontsize=12, color="white", pad=10)
     return fig_to_base64(fig)
 
-# === 修改：群成员条形图 (自己标蓝) ===
+# === 群成员条形图 ===
 def draw_member_bar(sub_df):
     set_style()
-    # 排除空名，统计前10
     member_counts = sub_df[sub_df["Sender"] != ""].groupby("Sender").size().sort_values(ascending=False).head(10)
-    
     if member_counts.empty: return None
     
     names = [clean_text(n)[:10] for n in member_counts.index]
     
-    # === 🎨 变色逻辑：我自己标蓝 ===
     colors = []
     for name in member_counts.index:
-        # 这里的 "Me" 要和你数据清洗时统一的名称一致 (Me 或 我)
-        if "Me" in name or "我" in name: 
-            colors.append(CONFIG["MAIN_COLOR"]) # 蓝色/青色
-        else:
-            colors.append(CONFIG["ACCENT_COLOR"]) # 红色/洋红
-    # ==============================
+        if "Me" in name or "我" in name: colors.append(CONFIG["MAIN_COLOR"])
+        else: colors.append(CONFIG["ACCENT_COLOR"])
 
     fig, ax = plt.subplots(figsize=(10, 4))
     bars = ax.barh(range(len(member_counts)), member_counts.values, color=colors)
     ax.invert_yaxis()
-    
     ax.set_yticks(range(len(member_counts)))
     ax.set_yticklabels(names, fontsize=10)
-    
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
     ax.spines['left'].set_visible(False)
     ax.set_xticks([])
     
-    # 标数字
     for bar in bars:
         ax.text(bar.get_width() + 1, bar.get_y() + bar.get_height()/2, 
                 f"{int(bar.get_width())}", va='center', fontsize=9, color="#ccc")
                 
-    ax.set_title("Top 10 Active Members", loc='right', fontsize=10, color="#666")
+    ax.set_title("活跃成员 Top 10", loc='right', fontsize=10, color="#666") # 汉化
     return fig_to_base64(fig)
 
-# === 🟡 更新：分析循环 ===
+# === 分析循环 ===
 def analyze_subset(subset_df, limit=10, is_group=False):
     top_names = subset_df.groupby("NickName").size().sort_values(ascending=False).head(limit).index
     results = []
     
     for rank, name in enumerate(top_names, 1):
         sub = subset_df[subset_df["NickName"] == name]
-        print(f"    Processing #{rank}: {name}")
+        print(f"    处理中 #{rank}: {name}") # 汉化
         
-        # 👇 关键逻辑：如果是群聊，就调用上面的画图函数
         member_bar = None
         if is_group:
             member_bar = draw_member_bar(sub)
@@ -462,84 +383,56 @@ def analyze_subset(subset_df, limit=10, is_group=False):
             "name": clean_text(name),
             "count": len(sub),
             "compare": draw_donut_pair(sub),
-            "heatmap": draw_heatmap(sub, "Activity"),
+            "heatmap": draw_heatmap(sub, "活跃热力图"),
             "hourly": draw_hourly_curve(sub),
             "wordcloud": draw_wordcloud(sub),
-            "member_bar": member_bar # 👈 必须把结果存进去！
+            "member_bar": member_bar
         }
         results.append(item)
     return results
 
 if __name__ == "__main__":
     df = load_data()
-    
-    if df.empty:
-        exit()
+    if df.empty: exit()
 
     print("🚀 [2/4] 计算全局统计...")
 
-    # ========= 时间范围 =========
     start_date = df["dt"].min().date()
     end_date = df["dt"].max().date()
     days = (end_date - start_date).days + 1
 
-    # ========= 消息量 =========
     total_msgs = len(df)
     daily_avg = total_msgs // days
 
-    # ========= 最疯狂的一天 =========
     daily_counts = df.groupby("Date").size()
     craziest_day = daily_counts.idxmax()
     craziest_count = int(daily_counts.max())
 
-    # ========= 字数统计 =========
     sent_chars = int(df[df["IsSender"] == 1]["StrContent"].str.len().sum())
     recv_chars = int(df[df["IsSender"] == 0]["StrContent"].str.len().sum())
     total_chars = sent_chars + recv_chars
 
-    # ========= 主动性 =========
-    sent_msgs = int((df["IsSender"] == 1).sum())
-    recv_msgs = int((df["IsSender"] == 0).sum())
-    sent_ratio = round(sent_msgs / (sent_msgs + recv_msgs) * 100)
-    recv_ratio = 100 - sent_ratio
-
-    # ========= 最亲密联系人（仅单聊） =========
     df_private = df[df["ChatType"] == "Private"]
     top_contact_series = df_private.groupby("NickName").size().sort_values(ascending=False)
-
     top_contact_name = clean_text(top_contact_series.index[0])
     top_contact_count = int(top_contact_series.iloc[0])
 
-    # ========= metrics 总包 =========
     metrics = {
         "total": total_msgs,
         "daily_avg": daily_avg,
-
         "start": start_date.strftime("%Y.%m.%d"),
         "end": end_date.strftime("%Y.%m.%d"),
-
         "craziest_day": craziest_day.strftime("%m-%d"),
         "craziest_count": craziest_count,
-
         "chars_total": total_chars,
         "chars_sent": sent_chars,
         "chars_recv": recv_chars,
-
         "top_contact_name": top_contact_name,
-        "top_contact_count": top_contact_count,
-
-        "sent_ratio": sent_ratio,
-        "recv_ratio": recv_ratio
+        "top_contact_count": top_contact_count
     }
 
-# ... 上面的代码保持不变 ...
-
-    # ========= 图表数据准备 =========
     df_p = df[df["ChatType"] == "Private"]
-    
-    # --- 🔴 修改开始：增加群聊过滤逻辑 ---
     raw_df_g = df[df["ChatType"] == "Group"]
-        # ========= 全局（仅我自己） =========
     df_me = df[df["IsSender"] == 1]
 
     global_charts = {
@@ -547,42 +440,30 @@ if __name__ == "__main__":
         "my_wordcloud": draw_wordcloud(df_me)
     }
 
-    
-    # 1. 统计我在每个群发了多少条 (IsSender=1)
     my_sent_counts = raw_df_g[raw_df_g["IsSender"] == 1].groupby("NickName").size()
-    
-    # 2. 找出那些我发言超过 10 条的群名
     active_group_names = my_sent_counts[my_sent_counts >= 10].index
-    
-    # 3. 只保留这些活跃群
     df_g = raw_df_g[raw_df_g["NickName"].isin(active_group_names)]
     
     print(f"🧹 过滤潜水群聊: 原有 {len(raw_df_g['NickName'].unique())} 个 -> 剩余 {len(active_group_names)} 个 (我发言>=10条)")
-    # --- 🔴 修改结束 ---
 
     print("📊 正在绘制年度趋势 & 全局词云...")
-    chart_me_trend = draw_line_chart(df[df["IsSender"]==1], "My Activity Trend (Sent Only)")
+    chart_me_trend = draw_line_chart(df[df["IsSender"]==1], "我的发言趋势（仅发送）") # 汉化
     chart_global_wc = draw_wordcloud(df)
 
     charts = {
-        "heatmap": draw_heatmap(df, "Annual Activity"),
-        "rank_p": draw_rank_bar(df_p, "Top 10 Friends"),
-        "rank_g": draw_rank_bar(df_g, "Top 10 Groups"),
-        "trend_me": chart_me_trend,       # <--- 新增
-        "wordcloud_global": chart_global_wc # <--- 新增
+        "heatmap": draw_heatmap(df, "年度活跃热力图"),
+        "rank_p": draw_rank_bar(df_p, "好友 Top 10"),
+        "rank_g": draw_rank_bar(df_g, "群聊 Top 10"),
+        "trend_me": chart_me_trend,
+        "wordcloud_global": chart_global_wc
     }
-    
-# ... 在 step1_analyze.py 的最下面 ...
 
     print("🚀 [3/4] 生成【单聊】深度画像...")
-    # 单聊不需要条形图，所以是 False
     p_profiles = analyze_subset(df_p, 10, is_group=False)
     
     print("🚀 [4/4] 生成【群聊】深度画像...")
-    # 👇👇👇 必须检查这里！有没有写 is_group=True ？ 👇👇👇
     g_profiles = analyze_subset(df_g, 10, is_group=True)
 
-    # ... 下面的保存代码保持不变 ...
     data_package = {
         "metrics": metrics,
         "charts": charts,
