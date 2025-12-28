@@ -52,7 +52,7 @@ top_contact_count = metrics.get("top_contact_count", 0)
 books_written = chars_sent / 253000
 books_read = chars_recv / 200000
 
-# ===================== 2. HTML 渲染函数 (核心修改) =====================
+# ===================== 2. HTML 渲染函数 =====================
 
 def render_profile_list(profile_list):
     if not profile_list: return "<p style='text-align:center; color:#666'>无数据</p>"
@@ -60,9 +60,7 @@ def render_profile_list(profile_list):
     for p in profile_list:
         wc_img = f'<img src="data:image/png;base64,{p["wordcloud"]}">' if p.get("wordcloud") else ""
         
-        # --- 核心修改：群聊 Top10 发言人图表 ---
-        # 逻辑：检查是否有 member_bar 数据。
-        # 注意：这个数据必须由 Step 1 生成。如果 Step 1 没生成，这里就不会显示。
+        # 群聊 Top10 发言人图表
         member_bar_html = ""
         if p.get("member_bar"):
             member_bar_html = f"""
@@ -116,10 +114,11 @@ html = f"""
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>2025 微信年度报告</title>
 <style>
-    /* 隐藏所有元素的滚动条 */
+    /* 隐藏滚动条 */
     ::-webkit-scrollbar {{
-        display: none;
+        display: none; 
     }}
+
     :root {{
         --bg: #000000;
         --text: #ffffff;
@@ -141,8 +140,9 @@ html = f"""
     }}
 
     .snap-container {{
-        height: 100vh; width: 100%;
+        height: 100vh; width: 100vw;
         overflow-y: scroll;
+        overflow-x: hidden; /* 关键：防止横向溢出 */
         scroll-snap-type: y mandatory;
         scroll-behavior: smooth;
     }}
@@ -165,7 +165,7 @@ html = f"""
     .section.active .anim-fade {{ opacity: 1; transform: translateY(0); }}
     .section.active .anim-scale {{ opacity: 1; transform: scale(1); }}
 
-    /* === 纯文本无边框样式 (De-card UI) === */
+    /* === UI 样式 === */
     
     .intro-title {{
         font-size: 5rem; font-weight: 900; line-height: 1.1; text-align: center;
@@ -174,7 +174,6 @@ html = f"""
         margin-bottom: 20px;
     }}
 
-    /* 浮动的大数字容器 */
     .floating-stat {{
         text-align: center;
         width: 100%;
@@ -197,13 +196,9 @@ html = f"""
         letter-spacing: -2px;
     }}
 
-    .stat-desc {{
-        font-size: 1.2rem; color: #888; letter-spacing: 1px; margin-top: 10px;
-    }}
-    
+    .stat-desc {{ font-size: 1.2rem; color: #888; letter-spacing: 1px; margin-top: 10px; }}
     .unit {{ font-size: 2rem; font-weight: normal; margin-left: 10px; color: #bbb; }}
 
-    /* 颜色强调与光效 */
     .c-blue .stat-val {{ color: var(--accent-blue); text-shadow: 0 0 40px rgba(0,242,255,0.4); }}
     .c-green .stat-val {{ color: var(--accent-green); text-shadow: 0 0 40px rgba(0,255,136,0.4); }}
     .c-gold .stat-val {{ color: var(--accent-gold); text-shadow: 0 0 40px rgba(255,215,0,0.4); }}
@@ -213,34 +208,18 @@ html = f"""
         filter: drop-shadow(0 0 20px rgba(255,50,50,0.5));
     }}
 
-    /* === 文字产出量：纯文字左右分栏 === */
     .text-split-container {{
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        width: 100%;
-        max-width: 900px;
-        gap: 60px; /* 左右间距 */
+        display: flex; justify-content: center; align-items: center;
+        width: 100%; max-width: 900px; gap: 60px;
     }}
-    
-    .text-col {{
-        flex: 1;
-        text-align: left;
-    }}
+    .text-col {{ flex: 1; text-align: left; }}
     .text-col.right {{ text-align: right; }}
-
-    .divider-line {{
-        width: 1px;
-        height: 150px;
-        background: linear-gradient(to bottom, transparent, #333, transparent);
-    }}
-
+    .divider-line {{ width: 1px; height: 150px; background: linear-gradient(to bottom, transparent, #333, transparent); }}
     .col-label {{ font-size: 1.5rem; font-weight: bold; margin-bottom: 15px; color: #fff; }}
     .col-num {{ font-size: 4rem; font-weight: 800; line-height: 1; margin-bottom: 15px; font-family: 'Segoe UI', sans-serif; }}
     .col-desc {{ font-size: 1rem; color: #888; line-height: 1.5; }}
     .col-highlight {{ color: #fff; font-weight: bold; font-size: 1.1em; }}
 
-    /* === 图表容器 (保持巨幕感) === */
     .chart-box {{
         width: 100%; max-width: 1000px;
         background: #111; padding: 20px; border-radius: 16px; border: 1px solid #222;
@@ -249,9 +228,27 @@ html = f"""
     .page-title {{ font-size: 2rem; margin-bottom: 30px; font-weight: bold; color: #fff; text-align: center; }}
     img {{ width: 100%; height: auto; border-radius: 8px; display: block; }}
 
-    /* === 详细列表页 === */
-    .section.scrollable {{ display: block; overflow-y: auto; padding-top: 80px; padding-bottom: 100px; }}
-    .detail-card {{ 
+/* === 修复长列表页黑屏/显示不全的核心代码 === */
+    .section.scrollable {{
+    /* 仍然是一整页 */
+    height: 100vh !important;
+    min-height: 100vh;
+
+    /* 保持 snap（这是关键） */
+    scroll-snap-align: start !important;
+
+    /* 不用 flex，避免垂直居中 */
+    display: block !important;
+
+    /* 👉 关键：页内滚动 */
+    overflow-y: auto !important;
+    overflow-x: hidden;
+
+    padding-top: 80px;
+    padding-bottom: 120px;
+    background: var(--bg);
+    }}
+        .detail-card {{ 
         background: #161616; border: 1px solid #222; padding: 25px; 
         border-radius: 16px; margin: 0 auto 40px; max-width: 900px; 
     }}
@@ -267,6 +264,21 @@ html = f"""
 
     .arrow {{ position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); font-size: 1.5rem; color: #444; animation: float 2s infinite; }}
     @keyframes float {{ 0%,100%{{transform:translate(-50%,0)}} 50%{{transform:translate(-50%,10px)}} }}
+
+    /* GitHub 按钮和免责声明 */
+    .github-btn {{
+        display: inline-block; margin: 40px 0; padding: 15px 30px;
+        background: #222; border: 1px solid #444; color: #fff;
+        text-decoration: none; border-radius: 30px; font-weight: bold;
+        transition: all 0.3s;
+    }}
+    .github-btn:hover {{
+        background: #fff; color: #000;
+        transform: translateY(-3px); box-shadow: 0 10px 20px rgba(255,255,255,0.2);
+    }}
+    .disclaimer-box {{
+        font-size: 0.85rem; color: #444; line-height: 1.6; text-align: center; max-width: 600px;
+    }}
 
 </style>
 </head>
@@ -300,26 +312,17 @@ html = f"""
 
     <section class="section">
         <div class="page-title anim-fade" style="margin-bottom: 60px;">文字产出量</div>
-        
         <div class="text-split-container">
             <div class="text-col right anim-fade" style="transition-delay: 0s;">
                 <div class="col-label">📤 我发送的</div>
                 <div class="col-num" style="color:var(--accent-purple)">{chars_sent:,}<span class="unit">字</span></div>
-                <div class="col-desc">
-                    相当于写了<br>
-                    <span class="col-highlight">{books_written:.1f}</span> 本《围城》
-                </div>
+                <div class="col-desc">相当于写了<br><span class="col-highlight">{books_written:.1f}</span> 本《围城》</div>
             </div>
-
             <div class="divider-line anim-scale"></div>
-
             <div class="text-col anim-fade" style="transition-delay: 0.1s;">
                 <div class="col-label">📥 我接收的</div>
                 <div class="col-num" style="color:var(--accent-blue)">{chars_recv:,}<span class="unit">字</span></div>
-                <div class="col-desc">
-                    相当于读了<br>
-                    <span class="col-highlight">{books_read:.1f}</span> 本《三体》
-                </div>
+                <div class="col-desc">相当于读了<br><span class="col-highlight">{books_read:.1f}</span> 本《三体》</div>
             </div>
         </div>
         <div class="arrow">﹀</div>
@@ -397,9 +400,38 @@ html = f"""
             <h3 style="text-align:center; color:var(--accent-green); margin-top:80px;">👥 群聊详情</h3>
             {render_profile_list(g_profiles)}
         </div>
-
-        <div style="text-align:center; padding: 60px 0; color: #444;">— End —</div>
+        <div class="arrow">﹀</div>
     </section>
+
+<section class="section">
+    <div class="intro-title" style="font-size: 3rem;">关于本项目</div>
+
+    <div class="floating-stat" style="margin-top: 30px;">
+        <div class="stat-label" style="font-size: 1.2rem; color:#888;">作者</div>
+        <div class="stat-val" style="font-size: 2.5rem; margin: 10px 0;">JTST</div>
+
+        <div class="stat-label" style="font-size: 1.2rem; color:#888; margin-top: 20px;">
+            开发时间
+        </div>
+        <div class="stat-val" style="font-size: 2.5rem; margin: 10px 0;">3 天</div>
+    </div>
+
+    <div style="text-align:center; margin-top:30px;">
+        <a href="https://github.com/Jintian-JTST/WeChat-Annual-Report-Generation"
+           target="_blank"
+           class="github-btn">
+            🔗 Jintian-JTST / WeChat-Annual-Report-Generation
+        </a>
+    </div>
+
+    <div class="disclaimer-box" style="margin: 30px auto;">
+        <div style="font-weight:bold; margin-bottom:10px; color:#666;">免责声明</div>
+        <p style="color:#ff0000;">
+            本项目为开源工具，仅供个人娱乐与数据回顾使用。<br>
+            所有数据分析均在本地设备运行，不涉及任何云端上传。
+        </p>
+    </div>
+</section>
 
 </div>
 
@@ -420,7 +452,6 @@ html = f"""
 </body>
 </html>
 """
-
 with open("Final_Report.html", "w", encoding="utf-8") as f:
     f.write(html)
 
