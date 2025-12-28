@@ -33,3 +33,30 @@
 7. 点击“解析数据”，等待完成。
 8. 解析完成后，点击最上方“数据”，选择“导出聊天记录（全部）”，选择保存路径，保存为CSV格式。
 9. 将导出的CSV文件放在项目根目录下。
+
+
+```
+WeChat-Annual-Report-Generation
+├── .gitattributes
+├── .gitignore
+├── Final_Report.html
+├── MemoTrace
+│   ├── MemoTrace.exe
+│   ├── data
+│   ├── icudtl.dat
+│   ├── qtwebengine_devtools_resources.pak
+│   ├── qtwebengine_resources.pak
+│   ├── qtwebengine_resources_100p.pak
+│   ├── qtwebengine_resources_200p.pak
+│   ├── update.exe
+│   └── 使用须知.txt
+├── README.md
+├── messages.csv
+├── old
+│   └── wechat_analysis.py
+├── report_data.json
+├── requirements.txt
+├── step1_analyze.py
+├── step2_render.py
+└── wechat_analysis.py
+```
