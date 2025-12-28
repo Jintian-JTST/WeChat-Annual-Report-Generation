@@ -2,4 +2,30 @@
 *.csv
 # 或者指定具体文件
 wechat/messages.csv
-wechat/report_data.json
+wechat/report_data.json# =====================
+# 数据文件（不提交）
+# =====================
+*.csv
+*.json
+
+# 如果你只想忽略特定文件（更安全）
+messages.csv
+report_data.json
+
+# =====================
+# Python 常规忽略
+# =====================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 虚拟环境
+.venv/
+venv/
+.env/
+
+# OS / 编辑器
+.DS_Store
+.vscode/
+.idea/
