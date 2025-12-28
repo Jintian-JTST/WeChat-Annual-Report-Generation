@@ -2,7 +2,8 @@
 *.csv
 # 或者指定具体文件
 wechat/messages.csv
-wechat/report_data.json# =====================
+wechat/report_data.json
+# =====================
 # 数据文件（不提交）
 # =====================
 *.csv
@@ -29,3 +30,6 @@ venv/
 .DS_Store
 .vscode/
 .idea/
+
+
+Final_Report.html

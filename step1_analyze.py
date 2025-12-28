@@ -314,7 +314,7 @@ def apply_strict_classification(df):
     return df
 
 def load_data():
-    print(f"🚀 [1/5] 读取数据: {CONFIG['CSV_PATH']} ...")
+    print(f"🚀 [1/4] 读取数据: {CONFIG['CSV_PATH']} ...")
     try:
         df = pd.read_csv(CONFIG['CSV_PATH'], encoding="utf-8", on_bad_lines="skip", low_memory=False, dtype=str)
     except:
@@ -450,7 +450,7 @@ def analyze_subset(subset_df, limit=10, is_group=False):
     
     for rank, name in enumerate(top_names, 1):
         sub = subset_df[subset_df["NickName"] == name]
-        print(f"    Processing #{rank}: {name}...")
+        print(f"    Processing #{rank}: {name}")
         
         # 👇 关键逻辑：如果是群聊，就调用上面的画图函数
         member_bar = None
