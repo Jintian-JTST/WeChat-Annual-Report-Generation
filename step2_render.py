@@ -104,17 +104,18 @@ html = f"""
 <title>2025 微信年度报告</title>
 <style>
     :root {{
-        --bg: #0d0d0d;
-        --card: #161616;
-        --accent: #00f2ea;
-        --highlight: #ff0050;
-        --text: #ccc;
+        --bg: #0b0b0b;
+        --card-bg: #141414;
+        --blue-accent: #00e5ff;
+        --red-accent: #ff4d6d;
+        --text-main: #ffffff;
+        --text-sub: rgba(255,255,255);
     }}
 
     body {{
         font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
         background: var(--bg);
-        color: var(--text);
+        color: var(--text-main);
         max-width: 900px;
         margin: 0 auto;
         padding: 40px;
@@ -123,89 +124,111 @@ html = f"""
     h1 {{
         text-align: center;
         color: #fff;
-        text-shadow: 0 0 15px rgba(0,242,234,0.4);
-        font-size: 2.5em;
-        margin-bottom: 5px;
+        text-shadow: 0 0 20px rgba(0,229,255,0.3);
+        font-size: 2.8em;
+        margin-bottom: 10px;
     }}
 
     .sub {{
         text-align: center;
-        color: #666;
-        margin-bottom: 50px;
-        font-size: 0.9em;
-        letter-spacing: 1px;
+        color: var(--text-sub);
+        margin-bottom: 60px;
+        font-size: 1em;
+        letter-spacing: 2px;
     }}
 
+    /* ============ 核心修改：竖直双色卡片样式 ============ */
     .hero-grid {{
         display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 20px;
-        margin-bottom: 40px;
+        grid-template-columns: repeat(2, 1fr); /* 两列布局 */
+        gap: 30px;
+        margin-bottom: 80px;
     }}
 
-    .stat-box {{
-        background: #111;
-        border: 1px solid #333;
-        border-radius: 12px;
-        padding: 25px;
+    .stat-card {{
         display: flex;
         flex-direction: column;
+        min-height: 340px;       /* 拉长高度 */
+        border-radius: 16px;
+        overflow: hidden;        /* 保证圆角 */
+        border: 1px solid #222;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }}
+
+    /* 上半部分：蓝色 */
+    .card-top {{
+        flex: 1;
+        background: linear-gradient(180deg, rgba(0,229,255,0.15), rgba(0,229,255,0.02));
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
         align-items: center;
-        gap: 20px;
+        padding: 20px;
     }}
 
-    .stat-item {{
-        width: 100%;
-        text-align: center;
-    }}
-
-    .stat-item:first-child {{
-        border-bottom: 1px dashed #333;
-        padding-bottom: 20px;
+    /* 下半部分：红色 */
+    .card-bottom {{
+        flex: 1;
+        background: linear-gradient(180deg, rgba(255,77,109,0.02), rgba(255,77,109,0.15));
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        padding: 20px;
     }}
 
     .stat-val {{
-        font-size: 2em;
+        font-size: 2.4em;
         font-weight: bold;
+        margin-bottom: 8px;
         color: #fff;
-        margin-bottom: 5px;
+        line-height: 1.1;
+        text-align: center;
     }}
+
+    .card-top .stat-val {{ text-shadow: 0 0 15px rgba(0,229,255,0.3); }}
+    .card-bottom .stat-val {{ text-shadow: 0 0 15px rgba(255,77,109,0.3); }}
 
     .stat-lbl {{
-        font-size: 0.9em;
-        color: #666;
+        font-size: 1.2em;
+        color: var(--text-sub);
         letter-spacing: 1px;
+        text-transform: uppercase;
     }}
+    /* ================================================= */
 
     .card {{
-        background: var(--card);
+        background: var(--card-bg);
         border: 1px solid #222;
-        padding: 20px;
-        border-radius: 12px;
-        margin-bottom: 30px;
+        padding: 24px;
+        border-radius: 16px;
+        margin-bottom: 40px;
     }}
 
     .card h3 {{
         margin-top: 0;
         color: #fff;
-        border-left: 3px solid var(--accent);
-        padding-left: 10px;
-        font-size: 1.2em;
+        border-left: 4px solid var(--blue-accent);
+        padding-left: 12px;
+        font-size: 1.3em;
+        margin-bottom: 20px;
     }}
 
     .section-header {{
         text-align: center;
-        margin: 60px 0 30px 0;
+        margin: 80px 0 40px 0;
         color: #fff;
-        border-bottom: 2px solid #222;
-        padding-bottom: 10px;
+        border-bottom: 1px solid #333;
+        padding-bottom: 20px;
+        font-size: 1.8em;
     }}
 
     .profile-item {{
         background: #111;
         border: 1px solid #222;
-        padding: 20px;
-        border-radius: 12px;
+        padding: 25px;
+        border-radius: 16px;
         margin-bottom: 50px;
     }}
 
@@ -215,39 +238,57 @@ html = f"""
         align-items: center;
         border-bottom: 1px solid #222;
         padding-bottom: 15px;
-        margin-bottom: 15px;
+        margin-bottom: 20px;
     }}
 
     .rank-badge {{
         background: #333;
         color: #fff;
-        padding: 2px 8px;
-        border-radius: 4px;
+        padding: 4px 10px;
+        border-radius: 6px;
         font-weight: bold;
+        font-size: 0.9em;
     }}
 
     .name-label {{
-        font-size: 1.3em;
+        font-size: 1.4em;
         font-weight: bold;
         color: #fff;
         margin-left: 10px;
     }}
 
     .count-label {{
-        color: var(--accent);
-        font-size: 1.1em;
+        color: var(--blue-accent);
+        font-size: 1.2em;
         font-family: monospace;
+        font-weight: bold;
     }}
 
     .grid-2 {{
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 10px;
+        gap: 15px;
+    }}
+
+    .viz-block {{
+        margin-bottom: 15px;
+        background: #0f0f0f;
+        border-radius: 8px;
+        padding: 10px;
+        border: 1px solid #1a1a1a;
+    }}
+    
+    .viz-label {{
+        font-size: 0.85em;
+        color: #666;
+        margin-bottom: 8px;
+        text-align: center;
     }}
 
     img {{
         width: 100%;
         border-radius: 6px;
+        display: block;
     }}
 </style>
 </head>
@@ -255,54 +296,55 @@ html = f"""
 <body>
 
 <h1>2025 年度回顾</h1>
-<div class="sub">{metrics.get("start","N/A")} - {metrics.get("end","N/A")} · 数据总览</div>
+<div class="sub">{metrics.get("start","N/A")} - {metrics.get("end","N/A")} · 微信数据全景报告</div>
 
 <div class="hero-grid">
-    <div class="stat-box">
-        <div class="stat-item">
+    
+    <div class="stat-card">
+        <div class="card-top blue">
             <div class="stat-val">{total_msgs:,}</div>
-            <div class="stat-lbl">年度消息总数</div>
+            <div class="stat-lbl">📨 年度消息总数</div>
         </div>
-        <div class="stat-item">
-            <div class="stat-val">{metrics["daily_avg"]}</div>
-            <div class="stat-lbl">日均消息数</div>
+        <div class="card-bottom red">
+            <div class="stat-val">{metrics["daily_avg"]:,}</div>
+            <div class="stat-lbl">📅 日均消息数</div>
         </div>
     </div>
 
-    <div class="stat-box">
-        <div class="stat-item">
+    <div class="stat-card">
+        <div class="card-top blue">
             <div class="stat-val">{chars_sent:,}</div>
-            <div class="stat-lbl">发送字数</div>
+            <div class="stat-lbl">📤 我发送的字数</div>
         </div>
-        <div class="stat-item">
+        <div class="card-bottom red">
             <div class="stat-val">{chars_recv:,}</div>
-            <div class="stat-lbl">接收字数</div>
+            <div class="stat-lbl">📥 接收的字数</div>
         </div>
     </div>
 
-    <div class="stat-box">
-        <div class="stat-item">
+    <div class="stat-card">
+        <div class="card-top blue">
             <div class="stat-val">{craziest_day}</div>
-            <div class="stat-lbl">消息最密集的一天</div>
+            <div class="stat-lbl">🔥 消息最密集的一天</div>
         </div>
-        <div class="stat-item">
+        <div class="card-bottom red">
             <div class="stat-val">{craziest_count:,}</div>
             <div class="stat-lbl">当日消息数</div>
         </div>
     </div>
 
-    <div class="stat-box">
-        <div class="stat-item">
-            <div class="stat-val">{top_contact_name}</div>
-            <div class="stat-lbl">联系最频繁的人</div>
+    <div class="stat-card">
+        <div class="card-top blue">
+            <div class="stat-val" style="font-size: 1.8em;">{top_contact_name}</div>
+            <div class="stat-lbl">❤️ 联系最频繁的人</div>
         </div>
-        <div class="stat-item">
+        <div class="card-bottom red">
             <div class="stat-val">{top_contact_count:,}</div>
-            <div class="stat-lbl">消息总数</div>
+            <div class="stat-lbl">你和 Ta 的消息总数</div>
         </div>
     </div>
-</div>
 
+</div>
 <div class="card">
     <h3>🕒 我发消息的时间分布（全年）</h3>
     <img src="data:image/png;base64,{global_charts.get("my_hourly","")}">
@@ -338,4 +380,5 @@ html = f"""
 with open("Final_Report.html", "w", encoding="utf-8") as f:
     f.write(html)
 
-print("✅ 中文版网页已生成：Final_Report.html")
+print(f"✅ 竖版卡片风格报告已生成！包含 {len(p_profiles)} 位好友和 {len(g_profiles)} 个群聊的详细数据。")
+print("👉 请双击打开 Final_Report.html 查看效果")

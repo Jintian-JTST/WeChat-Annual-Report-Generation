@@ -12,7 +12,7 @@ wechat/report_data.json
 # 如果你只想忽略特定文件（更安全）
 messages.csv
 report_data.json
-
+Final_Report.html
 # =====================
 # Python 常规忽略
 # =====================
@@ -32,4 +32,3 @@ venv/
 .idea/
 
 
-Final_Report.html

@@ -20,7 +20,7 @@
    ```
    python wechat_analysis.py
    ```
-6. 生成的年度报告将保存为`WeChat_Report_YYYY_Final.html`。
+6. 生成的年度报告将保存为`Final_Report.html`。
 7. 打开生成的HTML文件，查看你的微信年度报告。
 
 ### 如何导出微信聊天记录
